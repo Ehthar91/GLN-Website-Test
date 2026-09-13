@@ -558,6 +558,8 @@ const scheduleImportClose=document.querySelector('#scheduleImportClose');
 const scheduleImportFile=document.querySelector('#scheduleImportFile');
 const scheduleImportText=document.querySelector('#scheduleImportText');
 const scheduleImportAnalyze=document.querySelector('#scheduleImportAnalyze');
+const scheduleImportClear=document.querySelector('#scheduleImportClear');
+const scheduleImportReset=document.querySelector('#scheduleImportReset');
 const scheduleImportStatus=document.querySelector('#scheduleImportStatus');
 const scheduleImportPreview=document.querySelector('#scheduleImportPreview');
 const scheduleImportName=document.querySelector('#scheduleImportName');
@@ -798,6 +800,26 @@ function lessonImportAnalyzePasted(){
   const parsed=lessonImportParseText(text);if(!parsed.rows.length){lessonImportSetStatus('No timed activities were found. Try a format like “Guided practice — 10 min” or “9:00–9:10 Guided practice.”','error');return}
   lessonImportShowPreview(parsed,{sourceName:lessonImportSourceName||'Lesson Plan'});
 }
+function lessonImportClearText(){
+  if(scheduleImportText)scheduleImportText.value='';
+  lessonImportSetStatus('Pasted text cleared. The current schedule preview is unchanged.');
+  scheduleImportText?.focus();
+}
+function lessonImportReset(){
+  lessonImportRows=[];
+  lessonImportSourceName='Lesson Plan';
+  if(scheduleImportText)scheduleImportText.value='';
+  if(scheduleImportFile)scheduleImportFile.value='';
+  if(scheduleImportRows)scheduleImportRows.innerHTML='';
+  if(scheduleImportPreview)scheduleImportPreview.hidden=true;
+  if(scheduleImportName)scheduleImportName.value='Lesson Plan';
+  if(scheduleImportDate)scheduleImportDate.value=localScheduleDateKey(new Date());
+  if(scheduleImportStart)scheduleImportStart.value=lessonImportDefaultStart();
+  if(scheduleImportLength)scheduleImportLength.value='45';
+  if(scheduleImportFit){scheduleImportFit.textContent='';scheduleImportFit.classList.remove('is-exact','is-over','is-under')}
+  lessonImportSetStatus('Importer reset. Paste a new lesson plan or choose a TXT file.');
+  scheduleImportText?.focus();
+}
 function lessonImportOpenDialog(){
   if(!scheduleImportDialog)return;if(!scheduleImportDate.value)scheduleImportDate.value=localScheduleDateKey(new Date());if(!scheduleImportStart.value)scheduleImportStart.value=lessonImportDefaultStart();if(!scheduleImportLength.value)scheduleImportLength.value='45';
   if(typeof scheduleImportDialog.showModal==='function')scheduleImportDialog.showModal();else scheduleImportDialog.setAttribute('open','');
@@ -823,6 +845,8 @@ if(scheduleImportLessonPlan)scheduleImportLessonPlan.addEventListener('click',le
 if(scheduleImportClose)scheduleImportClose.addEventListener('click',lessonImportCloseDialog);
 if(scheduleImportFile)scheduleImportFile.addEventListener('change',()=>{const file=scheduleImportFile.files?.[0];if(file){lessonImportSourceName=file.name;lessonImportAnalyzeFile(file)}});
 if(scheduleImportAnalyze)scheduleImportAnalyze.addEventListener('click',lessonImportAnalyzePasted);
+if(scheduleImportClear)scheduleImportClear.addEventListener('click',lessonImportClearText);
+if(scheduleImportReset)scheduleImportReset.addEventListener('click',lessonImportReset);
 if(scheduleImportAddActivity)scheduleImportAddActivity.addEventListener('click',()=>{lessonImportRows.push({id:makeScheduleId('import-row'),name:'New activity',duration:5,time:''});lessonImportRenderRows();scheduleImportRows?.querySelector('tr:last-child input[type="text"]')?.focus()});
 if(scheduleImportDistribute)scheduleImportDistribute.addEventListener('click',lessonImportDistributeTime);
 if(scheduleImportCreate)scheduleImportCreate.addEventListener('click',lessonImportCreateSchedule);

@@ -468,7 +468,11 @@ Fish = ညၣ်</textarea>
                 <span>Paste lesson plan text</span>
                 <textarea id="scheduleImportText" rows="5" placeholder="Attendance & folders — 5 min&#10;Alphabet review — 8 min&#10;Guided practice — 10 min"></textarea>
               </label>
-              <button class="button ghost" id="scheduleImportAnalyze" type="button">Analyze pasted text</button>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                <button class="button ghost" id="scheduleImportAnalyze" type="button">Analyze pasted text</button>
+                <button class="button ghost" id="scheduleImportClear" type="button">Clear</button>
+                <button class="button ghost" id="scheduleImportReset" type="button">Reset importer</button>
+              </div>
               <p class="schedule-import-status" id="scheduleImportStatus" role="status" aria-live="polite">Choose a lesson plan file or paste your lesson plan above.</p>
             </div>
 
@@ -786,7 +790,7 @@ Taylor</textarea><small>Enter one student per line.</small></label>
   <script src="quiz.js?v=20260913-6"></script>
   <script src="quiz-classroom.js?v=20260913-17"></script>
   <script src="quiz-kiosk.js?v=20260913-1"></script>
-  <script src="calculator.js?v=20260913-14"></script>
+  <script src="calculator.js?v=20260913-15"></script>
   <script src="event-signup.js?v=20260912-15"></script>
   <script src="seating.js?v=20260913-42"></script>
   <script src="rgb-theme.js?v=20260911-2"></script>
