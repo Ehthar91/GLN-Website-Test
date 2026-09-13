@@ -611,15 +611,16 @@ function lessonImportDefaultStart(){
 }
 function lessonImportParseText(raw=''){
   const text=String(raw||'').replace(/\r/g,'').replace(/\u00a0/g,' ').replace(/[‐‑‒]/g,'-');
-  const rawLines=text.split(/\n+/).map(line=>line.trim()).filter(Boolean);
+  const sourceLines=text.split(/\n/).map(line=>line.trim()).filter(Boolean);
   const stripMarkdown=(value='')=>String(value||'')
     .replace(/^\s*#{1,6}\s*/,'')
     .replace(/\*\*|__/g,'')
     .replace(/`/g,'')
     .replace(/\[([^\]]+)\]\([^)]+\)/g,'$1')
     .replace(/<[^>]*>/g,' ')
-    .replace(/\s+/g,' ')
+    .replace(/[ \f\v]+/g,' ')
     .trim();
+  const cleanHeading=(value='')=>stripMarkdown(value).replace(/[\s:;,.\-–—]+$/,'').trim();
   const makeRow=(name,duration,start='')=>{
     const clean=lessonImportCandidateName(name);const mins=Math.max(0,Math.min(480,Number(duration)||0));
     if(!clean||!mins)return null;
@@ -628,67 +629,118 @@ function lessonImportParseText(raw=''){
   const minuteRange=/^(\d{1,3})\s*(?:-|–|—|to)\s*(\d{1,3})\s*(?:min|mins|minute|minutes)\.?$/i;
   const time='\\d{1,2}:\\d{2}\\s*(?:AM|PM|am|pm)?';
   const clockRange=new RegExp(`^(${time})\\s*(?:-|–|—|to)\\s*(${time})$`,'i');
+  const rangeFirst=new RegExp(`^(${time})\\s*(?:-|–|—|to)\\s*(${time})\\s*(?:[-–—:|]\\s*)?(.*)$`,'i');
+  const rangeLast=new RegExp(`^(.+?)\\s+(?:\\()?(${time})\\s*(?:-|–|—|to)\\s*(${time})(?:\\))?\\s*$`,'i');
+  const relativeRangeFirst=/^(\d{1,3})\s*(?:-|–|—|to)\s*(\d{1,3})\s*(?:min|mins|minute|minutes)\s*(?:[-–—:|]\s*)?(.*)$/i;
+  const durationOnly=/^(?:(?:time|duration)\s*:?\s*)?(\d{1,3})\s*(?:min|mins|minute|minutes)\.?$/i;
+  const durationFirst=/^(\d{1,3})\s*(?:min|mins|minute|minutes)\s*(?:[-–—:]\s*)+(.+)$/i;
+  const durationLast=/^(.+?)(?:\s*[-–—:]\s*|\s*\(|\s+)(\d{1,3})\s*(?:min|mins|minute|minutes)\.?\)?\s*$/i;
 
-  // Markdown lesson-plan tables are the most reliable source. If we find rows
-  // like "0–5 min | Warm-Up Review", use those rows only so summary sections
-  // such as "Quick Teaching Flow" are not counted a second time.
-  const tableRows=[];let tableFirstStart='';
-  rawLines.forEach(rawLine=>{
-    if(!rawLine.includes('|'))return;
-    const cells=rawLine.split('|').map(cell=>stripMarkdown(cell)).filter(cell=>cell&&!/^:?-{2,}:?$/.test(cell));
+  const isLessonSequenceHeading=(line='')=>/^lesson\s+sequence\b/i.test(cleanHeading(line));
+  const isStopHeading=(line='')=>/^(?:how will you know\b|quick teaching flow\b|standard\b|essential question\b|learning target\b|evidence of learning\b|materials\b|lesson\b|unit\b|date\b)/i.test(cleanHeading(line));
+
+  // When a full lesson plan includes a Lesson Sequence section, treat that section
+  // as authoritative. This prevents a later Quick Teaching Flow summary from being
+  // counted a second time when copied from a rendered table as plain/tabbed text.
+  let parseLines=sourceLines;
+  const sequenceIndex=sourceLines.findIndex(isLessonSequenceHeading);
+  if(sequenceIndex>=0){
+    let stop=sourceLines.length;
+    for(let i=sequenceIndex+1;i<sourceLines.length;i++){
+      if(isStopHeading(sourceLines[i])){stop=i;break;}
+    }
+    parseLines=sourceLines.slice(sequenceIndex+1,stop);
+  }
+
+  const structuredRows=[];let structuredFirstStart='';
+  const addStructured=(name,duration,start='')=>{
+    const row=makeRow(name,duration,start);if(!row)return;
+    structuredRows.push(row);if(!structuredFirstStart&&start)structuredFirstStart=start;
+  };
+
+  // First handle copied tables. Depending on the browser, copied table cells may be
+  // separated by pipes OR tabs. We only need the first two cells: Time and Activity.
+  parseLines.forEach(rawLine=>{
+    let cells=[];
+    if(rawLine.includes('|'))cells=rawLine.split('|').map(cell=>stripMarkdown(cell)).filter(cell=>cell&&!/^:?-{2,}:?$/.test(cell));
+    else if(rawLine.includes('\t'))cells=rawLine.split(/\t+/).map(cell=>stripMarkdown(cell)).filter(Boolean);
     if(cells.length<2)return;
     const timeCell=cells[0],activityCell=cells[1];
     if(/^(?:time|start|duration)$/i.test(timeCell)||/^(?:activity|what to do|lesson activity)$/i.test(activityCell))return;
     let match=timeCell.match(minuteRange);
-    if(match){
-      const from=Number(match[1]),to=Number(match[2]),duration=to-from;
-      const row=duration>0&&duration<=480?makeRow(activityCell,duration):null;
-      if(row)tableRows.push(row);
-      return;
-    }
+    if(match){const duration=Number(match[2])-Number(match[1]);if(duration>0&&duration<=480)addStructured(activityCell,duration);return;}
     match=timeCell.match(clockRange);
     if(match){
-      const duration=lessonImportDurationBetween(match[1],match[2]);
-      const parsedStart=lessonImportParseClock(match[1]);
-      const start=parsedStart?lessonImportClockInput(parsedStart.minutes):'';
-      const row=duration?makeRow(activityCell,duration,start):null;
-      if(row){tableRows.push(row);if(!tableFirstStart&&start)tableFirstStart=start}
+      const duration=lessonImportDurationBetween(match[1],match[2]);const parsedStart=lessonImportParseClock(match[1]);const start=parsedStart?lessonImportClockInput(parsedStart.minutes):'';
+      if(duration)addStructured(activityCell,duration,start);
     }
   });
-  if(tableRows.length){return{rows:tableRows,firstStart:tableFirstStart};}
+  if(structuredRows.length)return{rows:structuredRows,firstStart:structuredFirstStart};
 
-  const lines=rawLines.map(stripMarkdown).filter(Boolean);
-  const rangeFirst=new RegExp(`^(${time})\\s*(?:-|–|—|to)\\s*(${time})\\s*(?:[-–—:|]\\s*)?(.*)$`,'i');
-  const rangeLast=new RegExp(`^(.+?)\\s+(?:\\()?(${time})\\s*(?:-|–|—|to)\\s*(${time})(?:\\))?\\s*$`,'i');
-  const durationOnly=/^(?:(?:time|duration)\s*:?\s*)?(\d{1,3})\s*(?:min|mins|minute|minutes)\.?$/i;
-  const durationFirst=/^(\d{1,3})\s*(?:min|mins|minute|minutes)\s*(?:[-–—:]\s*)+(.+)$/i;
-  const durationLast=/^(.+?)(?:\s*[-–—:]\s*|\s*\(|\s+)(\d{1,3})\s*(?:min|mins|minute|minutes)\.?\)?\s*$/i;
-  const relativeRangeFirst=/^(\d{1,3})\s*(?:-|–|—|to)\s*(\d{1,3})\s*(?:min|mins|minute|minutes)\s*(?:[-–—:|]\s*)?(.*)$/i;
-  const results=[];let previousCandidate='';let firstStart='';
-  const seen=new Set();
+  const lines=parseLines.map(stripMarkdown).filter(Boolean);
+  const rangeRows=[];let rangeFirstStart='';
+  const rangeSeen=new Set();
+  const addRange=(name,duration,start='')=>{
+    const row=makeRow(name,duration,start);if(!row)return;
+    const key=`${row.name.toLowerCase()}|${row.duration}`;if(rangeSeen.has(key))return;rangeSeen.add(key);
+    rangeRows.push(row);if(!rangeFirstStart&&start)rangeFirstStart=start;
+  };
+
+  // Prefer start/end ranges (0–5 min, 25–43 min, 9:00–9:10) over standalone
+  // duration summaries. They define a real timeline and are much less ambiguous.
+  // Some browsers copy table cells onto separate lines, so also support:
+  //   0–5 min
+  //   Warm-Up Review
+  lines.forEach((line,index)=>{
+    let standalone=line.match(minuteRange);
+    if(standalone){
+      const duration=Number(standalone[2])-Number(standalone[1]);
+      const next=lines[index+1]||'';
+      const name=lessonImportCandidateName(next);
+      if(duration>0&&duration<=480&&name&&!/^(?:time|activity|what to do)$/i.test(name))addRange(name,duration);
+      return;
+    }
+    standalone=line.match(clockRange);
+    if(standalone){
+      const duration=lessonImportDurationBetween(standalone[1],standalone[2]);
+      const next=lines[index+1]||'';
+      const name=lessonImportCandidateName(next);
+      const parsedStart=lessonImportParseClock(standalone[1]);
+      if(duration&&name&&!/^(?:time|activity|what to do)$/i.test(name))addRange(name,duration,parsedStart?lessonImportClockInput(parsedStart.minutes):'');
+      return;
+    }
+    if(/^(?:time|activity|what to do)$/i.test(line)||/^[-:|\s]+$/.test(line))return;
+    let match=line.match(rangeFirst);
+    if(match){const duration=lessonImportDurationBetween(match[1],match[2]);const name=lessonImportCandidateName(match[3]);if(duration&&name)addRange(name,duration,lessonImportClockInput(lessonImportParseClock(match[1]).minutes));return;}
+    match=line.match(rangeLast);
+    if(match){const duration=lessonImportDurationBetween(match[2],match[3]);const name=lessonImportCandidateName(match[1]);if(duration&&name)addRange(name,duration,lessonImportClockInput(lessonImportParseClock(match[2]).minutes));return;}
+    match=line.match(relativeRangeFirst);
+    if(match){const duration=Number(match[2])-Number(match[1]);const name=lessonImportCandidateName(match[3]);if(duration>0&&duration<=480&&name)addRange(name,duration);}
+  });
+  if(rangeRows.length)return{rows:rangeRows,firstStart:rangeFirstStart};
+
+  // Final fallback for simple lists such as "Warm-up — 5 min". Metadata and
+  // summary headings are excluded so class length and section summaries are not
+  // mistaken for activities.
+  const results=[];let previousCandidate='';let firstStart='';const seen=new Set();
   const add=(name,duration,start='')=>{
     const row=makeRow(name,duration,start);if(!row)return;
     const key=`${row.name.toLowerCase()}|${row.duration}`;if(seen.has(key))return;seen.add(key);
     results.push(row);if(!firstStart&&start)firstStart=start;
   };
+  let inQuickFlow=false;
   lines.forEach(line=>{
-    // Ignore document metadata and section labels. In particular, "Time: 45 minutes"
-    // describes the whole class and is not an activity.
-    if(/^(?:date|time|unit|lesson|grade|standard|essential question|learning target|evidence of learning|materials|lesson sequence|quick teacher guide|quick teaching flow|how will you know students have mastered the standard\/?objective)\s*:/i.test(line))return;
-    if(/^(?:standard|essential question|learning target|evidence of learning|materials|lesson sequence|quick teacher guide|quick teaching flow|how will you know students have mastered the standard\/?objective)$/i.test(line))return;
+    if(/^quick teaching flow\b/i.test(cleanHeading(line))){inQuickFlow=true;return;}
+    if(inQuickFlow)return;
+    if(/^(?:date|time|unit|lesson|grade|standard|essential question|learning target|evidence of learning|materials|lesson sequence|quick teacher guide|how will you know students have mastered the standard\/?objective)\s*:/i.test(line))return;
+    if(/^(?:standard|essential question|learning target|evidence of learning|materials|lesson sequence|quick teacher guide|how will you know students have mastered the standard\/?objective)$/i.test(line))return;
     if(/^[-:|\s]+$/.test(line))return;
-    let match=line.match(rangeFirst);
-    if(match){const duration=lessonImportDurationBetween(match[1],match[2]);const name=lessonImportCandidateName(match[3])||previousCandidate;if(duration&&name)add(name,duration,lessonImportClockInput(lessonImportParseClock(match[1]).minutes));previousCandidate='';return}
-    match=line.match(rangeLast);
-    if(match){const duration=lessonImportDurationBetween(match[2],match[3]);const name=lessonImportCandidateName(match[1])||previousCandidate;if(duration&&name)add(name,duration,lessonImportClockInput(lessonImportParseClock(match[2]).minutes));previousCandidate='';return}
-    match=line.match(relativeRangeFirst);
-    if(match){const duration=Number(match[2])-Number(match[1]);const name=lessonImportCandidateName(match[3])||previousCandidate;if(duration>0&&duration<=480&&name)add(name,duration);previousCandidate='';return}
-    match=line.match(durationOnly);
-    if(match&&previousCandidate){add(previousCandidate,Number(match[1]));previousCandidate='';return}
+    let match=line.match(durationOnly);
+    if(match&&previousCandidate){add(previousCandidate,Number(match[1]));previousCandidate='';return;}
     match=line.match(durationFirst);
-    if(match){add(match[2],Number(match[1]));previousCandidate='';return}
+    if(match){add(match[2],Number(match[1]));previousCandidate='';return;}
     match=line.match(durationLast);
-    if(match){const maybeName=lessonImportCandidateName(match[1]);if(maybeName&&!/^(?:time|duration)$/i.test(maybeName))add(maybeName,Number(match[2]));else if(previousCandidate)add(previousCandidate,Number(match[2]));previousCandidate='';return}
+    if(match){const maybeName=lessonImportCandidateName(match[1]);if(maybeName&&!/^(?:time|duration)$/i.test(maybeName))add(maybeName,Number(match[2]));else if(previousCandidate)add(previousCandidate,Number(match[2]));previousCandidate='';return;}
     const candidate=lessonImportCandidateName(line);if(candidate&&!/[?:]$/.test(candidate)&&candidate.length>=2)previousCandidate=candidate;
   });
   return{rows:results,firstStart};
