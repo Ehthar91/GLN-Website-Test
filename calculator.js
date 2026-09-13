@@ -562,6 +562,7 @@ const scheduleImportClear=document.querySelector('#scheduleImportClear');
 const scheduleImportReset=document.querySelector('#scheduleImportReset');
 const scheduleImportStatus=document.querySelector('#scheduleImportStatus');
 const scheduleImportPreview=document.querySelector('#scheduleImportPreview');
+const scheduleImportEditSource=document.querySelector('#scheduleImportEditSource');
 const scheduleImportName=document.querySelector('#scheduleImportName');
 const scheduleImportDate=document.querySelector('#scheduleImportDate');
 const scheduleImportStart=document.querySelector('#scheduleImportStart');
@@ -778,17 +779,22 @@ function lessonImportRenderRows(){
   });
   lessonImportRenderFit();
 }
+function lessonImportSetPreviewMode(active){
+  if(!scheduleImportDialog)return;
+  scheduleImportDialog.classList.toggle('is-previewing',Boolean(active));
+  if(active){requestAnimationFrame(()=>{scheduleImportPreview?.scrollTo?.({top:0,behavior:'smooth'})})}
+}
 function lessonImportShowPreview(parsed,{sourceName='Lesson Plan'}={}){
   lessonImportRows=parsed.rows.map(row=>({...row}));lessonImportSourceName=sourceName||'Lesson Plan';
   if(scheduleImportName)scheduleImportName.value=lessonImportFileBaseName(sourceName);
   if(scheduleImportDate&&!scheduleImportDate.value)scheduleImportDate.value=localScheduleDateKey(new Date());
   if(scheduleImportStart)scheduleImportStart.value=scheduleImportStart.value||parsed.firstStart||lessonImportDefaultStart();
   if(scheduleImportLength&&!scheduleImportLength.value)scheduleImportLength.value='45';
-  if(scheduleImportPreview)scheduleImportPreview.hidden=false;lessonImportRenderRows();
+  if(scheduleImportPreview)scheduleImportPreview.hidden=false;lessonImportRenderRows();lessonImportSetPreviewMode(true);
   lessonImportSetStatus(`Found ${lessonImportRows.length} timed activit${lessonImportRows.length===1?'y':'ies'}. Review the schedule below before creating it.`,'ok');
 }
 async function lessonImportAnalyzeFile(file){
-  if(!file)return;lessonImportSetStatus(`Reading ${file.name}…`);scheduleImportPreview.hidden=true;
+  if(!file)return;lessonImportSetPreviewMode(false);lessonImportSetStatus(`Reading ${file.name}…`);scheduleImportPreview.hidden=true;
   try{
     const text=await lessonImportExtractFile(file);scheduleImportText.value=text.slice(0,25000);const parsed=lessonImportParseText(text);
     if(!parsed.rows.length){lessonImportSetStatus('I read the file, but could not find activities with times. Try adding durations such as “Warm-up — 5 min” or paste the timed section below.','error');return}
@@ -811,7 +817,7 @@ function lessonImportReset(){
   if(scheduleImportText)scheduleImportText.value='';
   if(scheduleImportFile)scheduleImportFile.value='';
   if(scheduleImportRows)scheduleImportRows.innerHTML='';
-  if(scheduleImportPreview)scheduleImportPreview.hidden=true;
+  if(scheduleImportPreview)scheduleImportPreview.hidden=true;lessonImportSetPreviewMode(false);
   if(scheduleImportName)scheduleImportName.value='Lesson Plan';
   if(scheduleImportDate)scheduleImportDate.value=localScheduleDateKey(new Date());
   if(scheduleImportStart)scheduleImportStart.value=lessonImportDefaultStart();
@@ -847,6 +853,7 @@ if(scheduleImportFile)scheduleImportFile.addEventListener('change',()=>{const fi
 if(scheduleImportAnalyze)scheduleImportAnalyze.addEventListener('click',lessonImportAnalyzePasted);
 if(scheduleImportClear)scheduleImportClear.addEventListener('click',lessonImportClearText);
 if(scheduleImportReset)scheduleImportReset.addEventListener('click',lessonImportReset);
+if(scheduleImportEditSource)scheduleImportEditSource.addEventListener('click',()=>{lessonImportSetPreviewMode(false);requestAnimationFrame(()=>scheduleImportText?.focus())});
 if(scheduleImportAddActivity)scheduleImportAddActivity.addEventListener('click',()=>{lessonImportRows.push({id:makeScheduleId('import-row'),name:'New activity',duration:5,time:''});lessonImportRenderRows();scheduleImportRows?.querySelector('tr:last-child input[type="text"]')?.focus()});
 if(scheduleImportDistribute)scheduleImportDistribute.addEventListener('click',lessonImportDistributeTime);
 if(scheduleImportCreate)scheduleImportCreate.addEventListener('click',lessonImportCreateSchedule);

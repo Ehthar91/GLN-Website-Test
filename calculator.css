@@ -432,3 +432,15 @@ body.schedule-fullscreen-open{overflow:hidden}
 .schedule-import-preview .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 @media(max-width:760px){.schedule-import-settings{grid-template-columns:1fr 1fr}.schedule-import-dialog{width:calc(100vw - 16px);max-height:calc(100vh - 16px)}.schedule-import-shell{max-height:calc(100vh - 16px)}.schedule-import-heading,.schedule-import-source,.schedule-import-preview{padding-left:14px;padding-right:14px}}
 @media(max-width:520px){.schedule-timer-toolbar-actions{width:100%;justify-content:stretch}.schedule-timer-toolbar-actions>.button{flex:1}.schedule-import-settings{grid-template-columns:1fr}.schedule-import-preview-heading{align-items:flex-start;flex-direction:column}.schedule-import-actions{justify-content:stretch}.schedule-import-actions .button{width:100%}}
+
+/* Lesson-plan importer: give the generated schedule room to breathe. */
+.schedule-import-source-editor{display:grid;gap:12px}
+.schedule-import-source-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.schedule-import-preview-tools{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.schedule-import-dialog.is-previewing .schedule-import-shell{height:calc(100vh - 28px)}
+.schedule-import-dialog.is-previewing .schedule-import-source{padding-top:12px;padding-bottom:12px;gap:8px}
+.schedule-import-dialog.is-previewing .schedule-import-source-editor,.schedule-import-dialog.is-previewing .schedule-import-setup-help{display:none}
+.schedule-import-dialog.is-previewing .schedule-import-preview{flex:1 1 auto;min-height:0;overflow:auto}
+.schedule-import-dialog.is-previewing .schedule-import-status{padding:8px 10px}
+.schedule-import-dialog.is-previewing .schedule-import-table-wrap{overflow:auto}
+@media(max-width:760px){.schedule-import-dialog.is-previewing .schedule-import-shell{height:calc(100vh - 16px)}.schedule-import-preview-tools{width:100%;justify-content:stretch}.schedule-import-preview-tools button{flex:1}}
