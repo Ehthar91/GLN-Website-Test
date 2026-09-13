@@ -782,7 +782,7 @@ function lessonImportShowPreview(parsed,{sourceName='Lesson Plan'}={}){
   lessonImportRows=parsed.rows.map(row=>({...row}));lessonImportSourceName=sourceName||'Lesson Plan';
   if(scheduleImportName)scheduleImportName.value=lessonImportFileBaseName(sourceName);
   if(scheduleImportDate&&!scheduleImportDate.value)scheduleImportDate.value=localScheduleDateKey(new Date());
-  if(scheduleImportStart)scheduleImportStart.value=parsed.firstStart||scheduleImportStart.value||lessonImportDefaultStart();
+  if(scheduleImportStart)scheduleImportStart.value=scheduleImportStart.value||parsed.firstStart||lessonImportDefaultStart();
   if(scheduleImportLength&&!scheduleImportLength.value)scheduleImportLength.value='45';
   if(scheduleImportPreview)scheduleImportPreview.hidden=false;lessonImportRenderRows();
   lessonImportSetStatus(`Found ${lessonImportRows.length} timed activit${lessonImportRows.length===1?'y':'ies'}. Review the schedule below before creating it.`,'ok');

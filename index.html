@@ -458,6 +458,11 @@ Fish = ညၣ်</textarea>
             </div>
 
             <div class="schedule-import-source">
+              <div class="schedule-import-settings" aria-label="Class setup">
+                <label>Class starts<input id="scheduleImportStart" type="time" /></label>
+                <label>Class length<input id="scheduleImportLength" type="number" min="1" max="480" step="1" value="45" /><small>minutes</small></label>
+              </div>
+              <small>Set the class start time and class length before importing or analyzing a lesson plan.</small>
               <label class="schedule-import-file">
                 <span>Lesson plan file</span>
                 <input id="scheduleImportFile" type="file" accept=".txt,.text,text/plain" />
@@ -484,8 +489,6 @@ Fish = ညၣ်</textarea>
               <div class="schedule-import-settings">
                 <label>Schedule name<input id="scheduleImportName" type="text" maxlength="60" placeholder="Karen Language Lesson" /></label>
                 <label>Date<input id="scheduleImportDate" type="date" /></label>
-                <label>Class starts<input id="scheduleImportStart" type="time" /></label>
-                <label>Class length<input id="scheduleImportLength" type="number" min="1" max="480" step="1" value="45" /><small>minutes</small></label>
               </div>
               <div class="schedule-import-fit" id="scheduleImportFit" aria-live="polite"></div>
               <div class="schedule-import-table-wrap">
@@ -790,7 +793,7 @@ Taylor</textarea><small>Enter one student per line.</small></label>
   <script src="quiz.js?v=20260913-6"></script>
   <script src="quiz-classroom.js?v=20260913-17"></script>
   <script src="quiz-kiosk.js?v=20260913-1"></script>
-  <script src="calculator.js?v=20260913-15"></script>
+  <script src="calculator.js?v=20260913-16"></script>
   <script src="event-signup.js?v=20260912-15"></script>
   <script src="seating.js?v=20260913-42"></script>
   <script src="rgb-theme.js?v=20260911-2"></script>
