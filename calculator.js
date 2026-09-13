@@ -551,6 +551,171 @@ if(stopScheduleTimer)stopScheduleTimer.addEventListener('click',()=>{
 });
 loadClassroomSchedules();specialEditorSlots=[defaultSpecialSlot()];setScheduleEditorType('weekly',{keepSpecial:true});renderSpecialSlotEditor();renderScheduleTimers();updateScheduleTimerClock();syncScheduleFullscreenUI();setInterval(updateScheduleTimerClock,500);
 
+/* Lesson Plan → Schedule Timer importer */
+const scheduleImportLessonPlan=document.querySelector('#scheduleImportLessonPlan');
+const scheduleImportDialog=document.querySelector('#scheduleImportDialog');
+const scheduleImportClose=document.querySelector('#scheduleImportClose');
+const scheduleImportFile=document.querySelector('#scheduleImportFile');
+const scheduleImportText=document.querySelector('#scheduleImportText');
+const scheduleImportAnalyze=document.querySelector('#scheduleImportAnalyze');
+const scheduleImportStatus=document.querySelector('#scheduleImportStatus');
+const scheduleImportPreview=document.querySelector('#scheduleImportPreview');
+const scheduleImportName=document.querySelector('#scheduleImportName');
+const scheduleImportDate=document.querySelector('#scheduleImportDate');
+const scheduleImportStart=document.querySelector('#scheduleImportStart');
+const scheduleImportLength=document.querySelector('#scheduleImportLength');
+const scheduleImportFit=document.querySelector('#scheduleImportFit');
+const scheduleImportRows=document.querySelector('#scheduleImportRows');
+const scheduleImportAddActivity=document.querySelector('#scheduleImportAddActivity');
+const scheduleImportDistribute=document.querySelector('#scheduleImportDistribute');
+const scheduleImportCreate=document.querySelector('#scheduleImportCreate');
+let lessonImportRows=[];
+let lessonImportSourceName='Lesson Plan';
+function lessonImportSetStatus(message,type=''){
+  if(!scheduleImportStatus)return;
+  scheduleImportStatus.textContent=message;scheduleImportStatus.classList.toggle('is-error',type==='error');scheduleImportStatus.classList.toggle('is-ok',type==='ok');
+}
+function lessonImportFileBaseName(name='Lesson Plan'){
+  return String(name||'Lesson Plan').replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ').replace(/\s+/g,' ').trim().slice(0,60)||'Lesson Plan';
+}
+function lessonImportCandidateName(value=''){
+  let name=String(value).replace(/^\s*(?:[-*•▪◦]+|\d+[.)]|[A-Za-z][.)])\s*/,'').trim();
+  name=name.replace(/^(?:activity|lesson step|step)\s*[:\-–—]\s*/i,'').replace(/[\s:;,.\-–—]+$/,'').trim();
+  if(!name||name.length>100)return '';
+  if(/^(?:time|duration|minutes?|materials?|objective|learning target|standard|essential question|evidence of learning|date|grade|unit|lesson|notes?)$/i.test(name))return '';
+  return name.slice(0,80);
+}
+function lessonImportParseClock(value=''){
+  const match=String(value).trim().toUpperCase().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/);if(!match)return null;
+  let hour=Number(match[1]),minute=Number(match[2]);if(minute>59)return null;
+  const meridiem=match[3]||'';
+  if(meridiem){if(hour<1||hour>12)return null;if(hour===12)hour=0;if(meridiem==='PM')hour+=12}else if(hour>23)return null;
+  return{minutes:hour*60+minute,meridiem};
+}
+function lessonImportClockInput(total){
+  const minutes=((Math.round(Number(total)||0)%1440)+1440)%1440;return `${String(Math.floor(minutes/60)).padStart(2,'0')}:${String(minutes%60).padStart(2,'0')}`;
+}
+function lessonImportDurationBetween(a,b){
+  const start=lessonImportParseClock(a),end=lessonImportParseClock(b);if(!start||!end)return null;
+  let finish=end.minutes;if(finish<=start.minutes){finish+=720;if(finish<=start.minutes)finish+=720}
+  const duration=finish-start.minutes;return duration>0&&duration<=480?duration:null;
+}
+function lessonImportDefaultStart(){
+  const now=new Date();let minutes=now.getHours()*60+now.getMinutes();minutes=Math.ceil(minutes/5)*5;return lessonImportClockInput(minutes);
+}
+function lessonImportParseText(raw=''){
+  const text=String(raw||'').replace(/\r/g,'').replace(/\u00a0/g,' ').replace(/[‐‑‒]/g,'-');
+  const lines=text.split(/\n+/).map(line=>line.replace(/\s+/g,' ').trim()).filter(Boolean);
+  const time='\\d{1,2}:\\d{2}\\s*(?:AM|PM|am|pm)?';
+  const rangeFirst=new RegExp(`^(${time})\\s*(?:-|–|—|to)\\s*(${time})\\s*(?:[-–—:|]\\s*)?(.*)$`,'i');
+  const rangeLast=new RegExp(`^(.+?)\\s+(?:\\()?(${time})\\s*(?:-|–|—|to)\\s*(${time})(?:\\))?\\s*$`,'i');
+  const durationOnly=/^(?:(?:time|duration)\s*:?\s*)?(\d{1,3})\s*(?:min|mins|minute|minutes)\.?$/i;
+  const durationFirst=/^(\d{1,3})\s*(?:min|mins|minute|minutes)\s*(?:[-–—:]\s*)+(.+)$/i;
+  const durationLast=/^(.+?)(?:\s*[-–—:]\s*|\s*\(|\s+)(\d{1,3})\s*(?:min|mins|minute|minutes)\.?\)?\s*$/i;
+  const results=[];let previousCandidate='';let firstStart='';
+  const add=(name,duration,start='')=>{
+    const clean=lessonImportCandidateName(name);const mins=Math.max(0,Math.min(480,Number(duration)||0));if(!clean||!mins)return;
+    results.push({id:makeScheduleId('import-row'),name:clean,duration:mins,time:'',sourceStart:start||''});if(!firstStart&&start)firstStart=start;
+  };
+  lines.forEach(line=>{
+    let match=line.match(rangeFirst);
+    if(match){const duration=lessonImportDurationBetween(match[1],match[2]);const name=lessonImportCandidateName(match[3])||previousCandidate;if(duration&&name)add(name,duration,lessonImportClockInput(lessonImportParseClock(match[1]).minutes));previousCandidate='';return}
+    match=line.match(rangeLast);
+    if(match){const duration=lessonImportDurationBetween(match[2],match[3]);const name=lessonImportCandidateName(match[1])||previousCandidate;if(duration&&name)add(name,duration,lessonImportClockInput(lessonImportParseClock(match[2]).minutes));previousCandidate='';return}
+    match=line.match(durationOnly);
+    if(match&&previousCandidate){add(previousCandidate,Number(match[1]));previousCandidate='';return}
+    match=line.match(durationFirst);
+    if(match){add(match[2],Number(match[1]));previousCandidate='';return}
+    match=line.match(durationLast);
+    if(match){const maybeName=lessonImportCandidateName(match[1]);if(maybeName&& !/^(?:time|duration)$/i.test(maybeName))add(maybeName,Number(match[2]));else if(previousCandidate)add(previousCandidate,Number(match[2]));previousCandidate='';return}
+    const candidate=lessonImportCandidateName(line);if(candidate&&!/[?:]$/.test(candidate)&&candidate.length>=2)previousCandidate=candidate;
+  });
+  return{rows:results,firstStart};
+}
+async function lessonImportExtractFile(file){
+  const ext=String(file.name||'').split('.').pop().toLowerCase();
+  if(ext==='txt'||ext==='text'||file.type==='text/plain')return file.text();
+  throw new Error('Please choose a TXT lesson plan. You can also paste lesson plan text below.');
+}
+function lessonImportReflowTimes(){
+  if(!lessonImportRows.length)return;let cursor=lessonImportParseClock(scheduleImportStart?.value||'')?.minutes;
+  if(cursor===undefined||cursor===null)return;
+  lessonImportRows.forEach(row=>{row.time=lessonImportClockInput(cursor);cursor+=Math.max(0,Number(row.duration)||0)});
+}
+function lessonImportTotals(){
+  const total=lessonImportRows.reduce((sum,row)=>sum+Math.max(0,Number(row.duration)||0),0);const length=Math.max(1,Math.min(480,Number(scheduleImportLength?.value)||45));return{total,length,difference:length-total};
+}
+function lessonImportRenderFit(){
+  if(!scheduleImportFit)return;const{total,length,difference}=lessonImportTotals();scheduleImportFit.classList.remove('is-exact','is-over','is-under');
+  if(difference===0){scheduleImportFit.classList.add('is-exact');scheduleImportFit.textContent=`Perfect fit · ${total} minutes of activities for a ${length}-minute class.`}
+  else if(difference>0){scheduleImportFit.classList.add('is-under');scheduleImportFit.textContent=`${total} minutes planned · ${difference} minute${difference===1?'':'s'} remaining in a ${length}-minute class.`}
+  else{scheduleImportFit.classList.add('is-over');scheduleImportFit.textContent=`${total} minutes planned · ${Math.abs(difference)} minute${Math.abs(difference)===1?'':'s'} over the ${length}-minute class.`}
+}
+function lessonImportRenderRows(){
+  if(!scheduleImportRows)return;lessonImportReflowTimes();scheduleImportRows.innerHTML='';
+  lessonImportRows.forEach((row,index)=>{
+    const tr=document.createElement('tr');
+    const start=document.createElement('td');const time=document.createElement('input');time.type='time';time.value=row.time||'';time.setAttribute('aria-label',`Start time for activity ${index+1}`);time.addEventListener('change',()=>{row.time=time.value});start.append(time);
+    const activity=document.createElement('td');const name=document.createElement('input');name.type='text';name.maxLength=80;name.value=row.name||'';name.setAttribute('aria-label',`Activity ${index+1}`);name.addEventListener('input',()=>row.name=name.value);activity.append(name);
+    const minutes=document.createElement('td');const duration=document.createElement('input');duration.type='number';duration.min='0';duration.max='480';duration.step='1';duration.value=String(Math.max(0,Number(row.duration)||0));duration.setAttribute('aria-label',`Minutes for ${row.name||`activity ${index+1}`}`);duration.addEventListener('change',()=>{row.duration=Math.max(0,Math.min(480,Number(duration.value)||0));lessonImportRenderRows()});minutes.append(duration);
+    const removeCell=document.createElement('td');const remove=document.createElement('button');remove.type='button';remove.className='schedule-import-remove';remove.textContent='×';remove.setAttribute('aria-label',`Remove ${row.name||`activity ${index+1}`}`);remove.addEventListener('click',()=>{lessonImportRows.splice(index,1);lessonImportRenderRows()});removeCell.append(remove);
+    tr.append(start,activity,minutes,removeCell);scheduleImportRows.append(tr);
+  });
+  lessonImportRenderFit();
+}
+function lessonImportShowPreview(parsed,{sourceName='Lesson Plan'}={}){
+  lessonImportRows=parsed.rows.map(row=>({...row}));lessonImportSourceName=sourceName||'Lesson Plan';
+  if(scheduleImportName)scheduleImportName.value=lessonImportFileBaseName(sourceName);
+  if(scheduleImportDate&&!scheduleImportDate.value)scheduleImportDate.value=localScheduleDateKey(new Date());
+  if(scheduleImportStart)scheduleImportStart.value=parsed.firstStart||scheduleImportStart.value||lessonImportDefaultStart();
+  if(scheduleImportLength&&!scheduleImportLength.value)scheduleImportLength.value='45';
+  if(scheduleImportPreview)scheduleImportPreview.hidden=false;lessonImportRenderRows();
+  lessonImportSetStatus(`Found ${lessonImportRows.length} timed activit${lessonImportRows.length===1?'y':'ies'}. Review the schedule below before creating it.`,'ok');
+}
+async function lessonImportAnalyzeFile(file){
+  if(!file)return;lessonImportSetStatus(`Reading ${file.name}…`);scheduleImportPreview.hidden=true;
+  try{
+    const text=await lessonImportExtractFile(file);scheduleImportText.value=text.slice(0,25000);const parsed=lessonImportParseText(text);
+    if(!parsed.rows.length){lessonImportSetStatus('I read the file, but could not find activities with times. Try adding durations such as “Warm-up — 5 min” or paste the timed section below.','error');return}
+    lessonImportShowPreview(parsed,{sourceName:file.name});
+  }catch(error){lessonImportSetStatus(error?.message||'Could not read that lesson plan.','error')}
+}
+function lessonImportAnalyzePasted(){
+  const text=scheduleImportText?.value.trim()||'';if(!text){lessonImportSetStatus('Paste some lesson plan text first.','error');scheduleImportText?.focus();return}
+  const parsed=lessonImportParseText(text);if(!parsed.rows.length){lessonImportSetStatus('No timed activities were found. Try a format like “Guided practice — 10 min” or “9:00–9:10 Guided practice.”','error');return}
+  lessonImportShowPreview(parsed,{sourceName:lessonImportSourceName||'Lesson Plan'});
+}
+function lessonImportOpenDialog(){
+  if(!scheduleImportDialog)return;if(!scheduleImportDate.value)scheduleImportDate.value=localScheduleDateKey(new Date());if(!scheduleImportStart.value)scheduleImportStart.value=lessonImportDefaultStart();if(!scheduleImportLength.value)scheduleImportLength.value='45';
+  if(typeof scheduleImportDialog.showModal==='function')scheduleImportDialog.showModal();else scheduleImportDialog.setAttribute('open','');
+}
+function lessonImportCloseDialog(){if(!scheduleImportDialog)return;if(typeof scheduleImportDialog.close==='function'&&scheduleImportDialog.open)scheduleImportDialog.close();else scheduleImportDialog.removeAttribute('open')}
+function lessonImportDistributeTime(){
+  if(!lessonImportRows.length)return;const{difference}=lessonImportTotals();if(difference<=0){lessonImportSetStatus(difference===0?'The lesson already fits the class exactly.':'The lesson is already over the class length. Reduce activity times first.','error');return}
+  let targets=lessonImportRows.filter(row=>(Number(row.duration)||0)<=0);if(!targets.length)targets=lessonImportRows;
+  const base=Math.floor(difference/targets.length),remainder=difference%targets.length;
+  targets.forEach((row,index)=>{row.duration=Math.max(1,(Number(row.duration)||0)+base+(index<remainder?1:0))});lessonImportRenderRows();lessonImportSetStatus(`Distributed ${difference} remaining minute${difference===1?'':'s'} across ${targets.length} activit${targets.length===1?'y':'ies'}.`,'ok');
+}
+function lessonImportCreateSchedule(){
+  if(!lessonImportRows.length){lessonImportSetStatus('Add at least one activity first.','error');return}
+  const name=(scheduleImportName?.value||'').trim()||lessonImportFileBaseName(lessonImportSourceName);const date=scheduleImportDate?.value||'';const start=scheduleImportStart?.value||'';if(!date){lessonImportSetStatus('Choose the date for this lesson.','error');scheduleImportDate?.focus();return}if(!start){lessonImportSetStatus('Choose the class start time.','error');scheduleImportStart?.focus();return}
+  const incomplete=lessonImportRows.find(row=>!String(row.name||'').trim()||Number(row.duration)<=0);if(incomplete){lessonImportSetStatus('Every activity needs a name and at least 1 minute.','error');return}
+  lessonImportReflowTimes();const{total,length,difference}=lessonImportTotals();
+  if(difference!==0&&!confirm(`This lesson uses ${total} of ${length} class minutes (${difference>0?`${difference} minutes remaining`:`${Math.abs(difference)} minutes over`}). Create it anyway?`))return;
+  const existing=classroomSchedules.filter(entry=>entry.type==='special'&&entry.date===date&&entry.enabled!==false);if(existing.length&&!confirm(`There ${existing.length===1?'is':'are'} already ${existing.length} enabled special schedule${existing.length===1?'':'s'} on ${formatScheduleDate(date)}. Add this lesson plan too?`))return;
+  const slots=lessonImportRows.map((row,index)=>({id:makeScheduleId('slot'),name:String(row.name).trim().slice(0,60),time:row.time||start,duration:Math.max(1,Math.min(480,Number(row.duration)||1))}));
+  classroomSchedules.push({id:makeScheduleId('special'),type:'special',name:name.slice(0,60),date,enabled:true,slots,source:'lesson-plan-import'});saveClassroomSchedules();renderScheduleTimers();updateScheduleTimerClock();lessonImportSetStatus(`Created “${name}” with ${slots.length} activities.`,'ok');lessonImportCloseDialog();
+}
+if(scheduleImportLessonPlan)scheduleImportLessonPlan.addEventListener('click',lessonImportOpenDialog);
+if(scheduleImportClose)scheduleImportClose.addEventListener('click',lessonImportCloseDialog);
+if(scheduleImportFile)scheduleImportFile.addEventListener('change',()=>{const file=scheduleImportFile.files?.[0];if(file){lessonImportSourceName=file.name;lessonImportAnalyzeFile(file)}});
+if(scheduleImportAnalyze)scheduleImportAnalyze.addEventListener('click',lessonImportAnalyzePasted);
+if(scheduleImportAddActivity)scheduleImportAddActivity.addEventListener('click',()=>{lessonImportRows.push({id:makeScheduleId('import-row'),name:'New activity',duration:5,time:''});lessonImportRenderRows();scheduleImportRows?.querySelector('tr:last-child input[type="text"]')?.focus()});
+if(scheduleImportDistribute)scheduleImportDistribute.addEventListener('click',lessonImportDistributeTime);
+if(scheduleImportCreate)scheduleImportCreate.addEventListener('click',lessonImportCreateSchedule);
+if(scheduleImportStart)scheduleImportStart.addEventListener('change',lessonImportRenderRows);
+if(scheduleImportLength)scheduleImportLength.addEventListener('input',lessonImportRenderFit);
+
 /* Classroom Dashboard */
 const dashboardClassSelect=document.querySelector('#dashboardClassSelect');
 const dashboardClassCount=document.querySelector('#dashboardClassCount');
