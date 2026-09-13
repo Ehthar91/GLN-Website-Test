@@ -579,10 +579,16 @@ function lessonImportFileBaseName(name='Lesson Plan'){
   return String(name||'Lesson Plan').replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ').replace(/\s+/g,' ').trim().slice(0,60)||'Lesson Plan';
 }
 function lessonImportCandidateName(value=''){
-  let name=String(value).replace(/^\s*(?:[-*•▪◦]+|\d+[.)]|[A-Za-z][.)])\s*/,'').trim();
-  name=name.replace(/^(?:activity|lesson step|step)\s*[:\-–—]\s*/i,'').replace(/[\s:;,.\-–—]+$/,'').trim();
-  if(!name||name.length>100)return '';
-  if(/^(?:time|duration|minutes?|materials?|objective|learning target|standard|essential question|evidence of learning|date|grade|unit|lesson|notes?)$/i.test(name))return '';
+  let name=String(value||'')
+    .replace(/^\s*#{1,6}\s*/,'')
+    .replace(/\*\*|__/g,'')
+    .replace(/`/g,'')
+    .replace(/^\s*[|>]+\s*|\s*[|]+\s*$/g,'')
+    .replace(/^\s*(?:[-*•▪◦]+|\d+[.)]|[A-Za-z][.)])\s*/,'')
+    .trim();
+  name=name.replace(/^(?:activity|lesson step|step)\s*[:\-–—]\s*/i,'').replace(/[\s:;,\.\-–—]+$/,'').trim();
+  if(!name||name.length>120)return '';
+  if(/^(?:time|duration|minutes?|materials?|objective|learning target|standard|essential question|evidence of learning|date|grade|unit|lesson|notes?|lesson sequence|quick teacher guide|quick teaching flow|how will you know students have mastered the standard\/?objective)$/i.test(name))return '';
   return name.slice(0,80);
 }
 function lessonImportParseClock(value=''){
@@ -605,29 +611,84 @@ function lessonImportDefaultStart(){
 }
 function lessonImportParseText(raw=''){
   const text=String(raw||'').replace(/\r/g,'').replace(/\u00a0/g,' ').replace(/[‐‑‒]/g,'-');
-  const lines=text.split(/\n+/).map(line=>line.replace(/\s+/g,' ').trim()).filter(Boolean);
+  const rawLines=text.split(/\n+/).map(line=>line.trim()).filter(Boolean);
+  const stripMarkdown=(value='')=>String(value||'')
+    .replace(/^\s*#{1,6}\s*/,'')
+    .replace(/\*\*|__/g,'')
+    .replace(/`/g,'')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g,'$1')
+    .replace(/<[^>]*>/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+  const makeRow=(name,duration,start='')=>{
+    const clean=lessonImportCandidateName(name);const mins=Math.max(0,Math.min(480,Number(duration)||0));
+    if(!clean||!mins)return null;
+    return{id:makeScheduleId('import-row'),name:clean,duration:mins,time:'',sourceStart:start||''};
+  };
+  const minuteRange=/^(\d{1,3})\s*(?:-|–|—|to)\s*(\d{1,3})\s*(?:min|mins|minute|minutes)\.?$/i;
   const time='\\d{1,2}:\\d{2}\\s*(?:AM|PM|am|pm)?';
+  const clockRange=new RegExp(`^(${time})\\s*(?:-|–|—|to)\\s*(${time})$`,'i');
+
+  // Markdown lesson-plan tables are the most reliable source. If we find rows
+  // like "0–5 min | Warm-Up Review", use those rows only so summary sections
+  // such as "Quick Teaching Flow" are not counted a second time.
+  const tableRows=[];let tableFirstStart='';
+  rawLines.forEach(rawLine=>{
+    if(!rawLine.includes('|'))return;
+    const cells=rawLine.split('|').map(cell=>stripMarkdown(cell)).filter(cell=>cell&&!/^:?-{2,}:?$/.test(cell));
+    if(cells.length<2)return;
+    const timeCell=cells[0],activityCell=cells[1];
+    if(/^(?:time|start|duration)$/i.test(timeCell)||/^(?:activity|what to do|lesson activity)$/i.test(activityCell))return;
+    let match=timeCell.match(minuteRange);
+    if(match){
+      const from=Number(match[1]),to=Number(match[2]),duration=to-from;
+      const row=duration>0&&duration<=480?makeRow(activityCell,duration):null;
+      if(row)tableRows.push(row);
+      return;
+    }
+    match=timeCell.match(clockRange);
+    if(match){
+      const duration=lessonImportDurationBetween(match[1],match[2]);
+      const parsedStart=lessonImportParseClock(match[1]);
+      const start=parsedStart?lessonImportClockInput(parsedStart.minutes):'';
+      const row=duration?makeRow(activityCell,duration,start):null;
+      if(row){tableRows.push(row);if(!tableFirstStart&&start)tableFirstStart=start}
+    }
+  });
+  if(tableRows.length){return{rows:tableRows,firstStart:tableFirstStart};}
+
+  const lines=rawLines.map(stripMarkdown).filter(Boolean);
   const rangeFirst=new RegExp(`^(${time})\\s*(?:-|–|—|to)\\s*(${time})\\s*(?:[-–—:|]\\s*)?(.*)$`,'i');
   const rangeLast=new RegExp(`^(.+?)\\s+(?:\\()?(${time})\\s*(?:-|–|—|to)\\s*(${time})(?:\\))?\\s*$`,'i');
   const durationOnly=/^(?:(?:time|duration)\s*:?\s*)?(\d{1,3})\s*(?:min|mins|minute|minutes)\.?$/i;
   const durationFirst=/^(\d{1,3})\s*(?:min|mins|minute|minutes)\s*(?:[-–—:]\s*)+(.+)$/i;
   const durationLast=/^(.+?)(?:\s*[-–—:]\s*|\s*\(|\s+)(\d{1,3})\s*(?:min|mins|minute|minutes)\.?\)?\s*$/i;
+  const relativeRangeFirst=/^(\d{1,3})\s*(?:-|–|—|to)\s*(\d{1,3})\s*(?:min|mins|minute|minutes)\s*(?:[-–—:|]\s*)?(.*)$/i;
   const results=[];let previousCandidate='';let firstStart='';
+  const seen=new Set();
   const add=(name,duration,start='')=>{
-    const clean=lessonImportCandidateName(name);const mins=Math.max(0,Math.min(480,Number(duration)||0));if(!clean||!mins)return;
-    results.push({id:makeScheduleId('import-row'),name:clean,duration:mins,time:'',sourceStart:start||''});if(!firstStart&&start)firstStart=start;
+    const row=makeRow(name,duration,start);if(!row)return;
+    const key=`${row.name.toLowerCase()}|${row.duration}`;if(seen.has(key))return;seen.add(key);
+    results.push(row);if(!firstStart&&start)firstStart=start;
   };
   lines.forEach(line=>{
+    // Ignore document metadata and section labels. In particular, "Time: 45 minutes"
+    // describes the whole class and is not an activity.
+    if(/^(?:date|time|unit|lesson|grade|standard|essential question|learning target|evidence of learning|materials|lesson sequence|quick teacher guide|quick teaching flow|how will you know students have mastered the standard\/?objective)\s*:/i.test(line))return;
+    if(/^(?:standard|essential question|learning target|evidence of learning|materials|lesson sequence|quick teacher guide|quick teaching flow|how will you know students have mastered the standard\/?objective)$/i.test(line))return;
+    if(/^[-:|\s]+$/.test(line))return;
     let match=line.match(rangeFirst);
     if(match){const duration=lessonImportDurationBetween(match[1],match[2]);const name=lessonImportCandidateName(match[3])||previousCandidate;if(duration&&name)add(name,duration,lessonImportClockInput(lessonImportParseClock(match[1]).minutes));previousCandidate='';return}
     match=line.match(rangeLast);
     if(match){const duration=lessonImportDurationBetween(match[2],match[3]);const name=lessonImportCandidateName(match[1])||previousCandidate;if(duration&&name)add(name,duration,lessonImportClockInput(lessonImportParseClock(match[2]).minutes));previousCandidate='';return}
+    match=line.match(relativeRangeFirst);
+    if(match){const duration=Number(match[2])-Number(match[1]);const name=lessonImportCandidateName(match[3])||previousCandidate;if(duration>0&&duration<=480&&name)add(name,duration);previousCandidate='';return}
     match=line.match(durationOnly);
     if(match&&previousCandidate){add(previousCandidate,Number(match[1]));previousCandidate='';return}
     match=line.match(durationFirst);
     if(match){add(match[2],Number(match[1]));previousCandidate='';return}
     match=line.match(durationLast);
-    if(match){const maybeName=lessonImportCandidateName(match[1]);if(maybeName&& !/^(?:time|duration)$/i.test(maybeName))add(maybeName,Number(match[2]));else if(previousCandidate)add(previousCandidate,Number(match[2]));previousCandidate='';return}
+    if(match){const maybeName=lessonImportCandidateName(match[1]);if(maybeName&&!/^(?:time|duration)$/i.test(maybeName))add(maybeName,Number(match[2]));else if(previousCandidate)add(previousCandidate,Number(match[2]));previousCandidate='';return}
     const candidate=lessonImportCandidateName(line);if(candidate&&!/[?:]$/.test(candidate)&&candidate.length>=2)previousCandidate=candidate;
   });
   return{rows:results,firstStart};
