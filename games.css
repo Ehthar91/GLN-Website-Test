@@ -2,3 +2,9 @@
 
 /* Desktop/Chromebook learning hint: both Shift keys glow only when Shift is required. */
 .keyboard .key.desktop-shift-hint{border-color:#f0b429!important;background:#fff1b8!important;color:#6b4600!important;box-shadow:0 0 0 3px rgba(240,180,41,.24),0 0 18px rgba(240,180,41,.34)!important}
+
+/* Desktop/Chromebook game hint readability: keep the blue cue but use dark text for contrast. */
+@media (hover:hover) and (pointer:fine){
+  .game-keyboard .key.expected{color:#0e3d94!important;}
+  .game-keyboard .key.expected small{color:#315eaa!important;text-shadow:none!important;}
+}
