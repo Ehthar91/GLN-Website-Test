@@ -1078,6 +1078,21 @@ function renderWheelProbability(){
     row.append(name,input,theory,observed);wheelProbabilityRows.appendChild(row);
   });
 }
+function updateWheelWinnerActions(){
+  const keep=document.querySelector('#keepWheelWinner'),remove=document.querySelector('#removeWheelWinner');
+  if(!keep||!remove)return;
+  if(wheelMode==='probability'){
+    keep.textContent='Close';
+    remove.textContent='Spin Again';
+    keep.setAttribute('aria-label','Close probability result');
+    remove.setAttribute('aria-label','Spin again with the same probability setup');
+  }else{
+    keep.textContent='Keep';
+    remove.textContent='Remove';
+    keep.setAttribute('aria-label','Keep selected name on the wheel');
+    remove.setAttribute('aria-label','Remove selected name from the wheel');
+  }
+}
 function setWheelMode(mode,{persist=true,resetExperiment=false}={}){
   wheelMode=mode==='probability'?'probability':'picker';
   if(persist)localStorage.setItem('glnWheelMode',wheelMode);
@@ -1085,6 +1100,7 @@ function setWheelMode(mode,{persist=true,resetExperiment=false}={}){
   wheelModeProbability.classList.toggle('active',wheelMode==='probability');wheelModeProbability.setAttribute('aria-pressed',String(wheelMode==='probability'));
   wheelProbabilityPanel.hidden=wheelMode!=='probability';
   const title=document.querySelector('#wheelTitle');if(title)title.textContent=wheelMode==='probability'?'Probability Name Picker':'Name Picker';
+  updateWheelWinnerActions();
   if(resetExperiment)resetWheelExperiment(false);
   renderWheelProbability();drawWheel();
   if(persist&&!window.__classroomToolsApplyingCloud)window.queueClassroomToolsCloudSync?.();
@@ -1173,7 +1189,10 @@ document.querySelector('#shuffleWheel').onclick=()=>{const entries=currentWheelE
 document.querySelector('#clearWheel').onclick=()=>{wheelEntries.value='';wheelWeights={};wheelManualColors={};saveWheelWeights();saveWheelColors();saveAndDrawWheel();wheelEntries.focus()};
 document.querySelector('#clearWheelResults').onclick=()=>{wheelHistory=[];renderWheelHistory();if(wheelMode==='probability')resetWheelExperiment()};
 document.querySelector('#keepWheelWinner').onclick=()=>{wheelWinner.hidden=true};
-document.querySelector('#removeWheelWinner').onclick=()=>{const entries=wheelEntries.value.split(/\r?\n/),index=entries.findIndex(item=>item.trim()===lastWheelWinner);if(index>=0)entries.splice(index,1);delete wheelWeights[lastWheelWinner];delete wheelManualColors[lastWheelWinner];saveWheelWeights();saveWheelColors();wheelEntries.value=entries.join('\n').replace(/^\s+|\s+$/g,'');saveAndDrawWheel();wheelWinner.hidden=true};
+document.querySelector('#removeWheelWinner').onclick=()=>{
+  if(wheelMode==='probability'){wheelWinner.hidden=true;setTimeout(spinRandomWheel,80);return}
+  const entries=wheelEntries.value.split(/\r?\n/),index=entries.findIndex(item=>item.trim()===lastWheelWinner);if(index>=0)entries.splice(index,1);delete wheelWeights[lastWheelWinner];delete wheelManualColors[lastWheelWinner];saveWheelWeights();saveWheelColors();wheelEntries.value=entries.join('\n').replace(/^\s+|\s+$/g,'');saveAndDrawWheel();wheelWinner.hidden=true
+};
 wheelTogglePanel.onclick=()=>{
   const collapsed=wheelPanel.classList.toggle('controls-collapsed');
   wheelTogglePanel.textContent=collapsed?'Show panel':'Hide panel';
