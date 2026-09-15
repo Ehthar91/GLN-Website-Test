@@ -465,3 +465,24 @@ body.schedule-fullscreen-open{overflow:hidden}
 body.theme-rgb .wheel-mode-switch{border-color:#315271;background:#0b1729}body.theme-rgb .wheel-mode-switch button{color:#9fb1ca}body.theme-rgb .wheel-mode-switch button.active{color:#fff;background:linear-gradient(135deg,#153c64,#40235f);box-shadow:0 0 0 1px #5ce5ff,0 0 12px rgba(22,224,255,.18)}
 body.theme-rgb .wheel-probability-panel{border-color:#315271;background:linear-gradient(180deg,#132943,#0e2138)}body.theme-rgb .wheel-probability-heading strong{color:#f1f7ff}body.theme-rgb .wheel-probability-heading small{color:#a9bdd4}body.theme-rgb .wheel-probability-heading button{border-color:#3a5b7b;background:#10243c;color:#dcecff}body.theme-rgb .wheel-probability-formula{background:#10243c;color:#a9bdd4}body.theme-rgb .wheel-probability-formula strong{color:#64ddff}body.theme-rgb .wheel-probability-formula b{background:#182f4c;color:#f1f7ff}body.theme-rgb .wheel-probability-row{border-color:#294967;background:#10243c}body.theme-rgb .wheel-probability-row.is-header{border-color:#315271;background:#16304d;color:#a9bdd4}body.theme-rgb .wheel-probability-name{color:#f1f7ff}body.theme-rgb .wheel-probability-weight{border-color:#355777;background:#0d1f35;color:#fff}body.theme-rgb .wheel-probability-theory{color:#64ddff}body.theme-rgb .wheel-probability-experiment{color:#c6d7e9}
 @media(max-width:620px){.wheel-probability-heading{flex-direction:column}.wheel-probability-heading>div:last-child{width:100%;justify-content:stretch}.wheel-probability-heading button{flex:1}.wheel-probability-formula{grid-template-columns:1fr auto}.wheel-probability-formula strong{grid-column:1/-1;grid-row:2}.wheel-probability-row{grid-template-columns:minmax(100px,1.35fr) 66px 68px 92px;gap:5px;padding-left:5px;padding-right:5px}.wheel-probability-name{font-size:.69rem}.wheel-probability-theory,.wheel-probability-experiment{font-size:.62rem}}
+
+
+/* Name Picker wheel color modes */
+.wheel-color-panel{display:grid;gap:10px;padding:12px;border:1px solid #d8e3ee;border-radius:13px;background:#f8fbfe}
+.wheel-color-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.wheel-color-heading>div:first-child{display:flex;flex-direction:column;gap:3px}.wheel-color-heading strong{color:#173868;font-size:.86rem}.wheel-color-heading small{color:#6f7f91;font-size:.7rem;line-height:1.35}
+.wheel-color-mode-switch{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;border:1px solid #cfdcea;border-radius:10px;background:#eaf1f7;min-width:210px}
+.wheel-color-mode-switch button{min-height:34px;padding:0 9px;border:0;border-radius:7px;background:transparent;color:#65758a;font:850 .7rem Inter,sans-serif;cursor:pointer;white-space:nowrap}
+.wheel-color-mode-switch button.active{background:#fff;color:#173868;box-shadow:0 2px 7px rgba(18,33,63,.12)}
+.wheel-manual-colors{display:grid;gap:5px;max-height:245px;overflow:auto;padding:2px}
+.wheel-manual-colors[hidden]{display:none}
+.wheel-color-row{display:grid;grid-template-columns:minmax(0,1fr) 48px 76px;align-items:center;gap:8px;min-height:40px;padding:6px 8px;border:1px solid #dce6ef;border-radius:9px;background:#fff}
+.wheel-color-row>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#26394f;font:800 .74rem Inter,"Noto Sans Myanmar",sans-serif}
+.wheel-color-row input[type="color"]{width:42px;height:30px;padding:2px;border:1px solid #c7d5e3;border-radius:7px;background:#fff;cursor:pointer}
+.wheel-color-row code{justify-self:end;color:#526075;font:800 .65rem/1 Inter,monospace}
+.wheel-color-empty{margin:0;padding:10px;border:1px dashed #cad8e6;border-radius:9px;color:#708196;text-align:center;font-size:.72rem}
+body.theme-rgb .wheel-color-panel{border-color:#315271;background:linear-gradient(180deg,#132943,#0e2138)}
+body.theme-rgb .wheel-color-heading strong{color:#f1f7ff}body.theme-rgb .wheel-color-heading small{color:#a9bdd4}
+body.theme-rgb .wheel-color-mode-switch{border-color:#315271;background:#0b1729}body.theme-rgb .wheel-color-mode-switch button{color:#9fb1ca}body.theme-rgb .wheel-color-mode-switch button.active{color:#fff;background:linear-gradient(135deg,#153c64,#40235f);box-shadow:0 0 0 1px #5ce5ff,0 0 12px rgba(22,224,255,.18)}
+body.theme-rgb .wheel-color-row{border-color:#294967;background:#10243c}body.theme-rgb .wheel-color-row>span{color:#f1f7ff}body.theme-rgb .wheel-color-row code{color:#c6d7e9}body.theme-rgb .wheel-color-row input[type="color"]{border-color:#3a5b7b;background:#0d1f35}body.theme-rgb .wheel-color-empty{border-color:#315271;color:#a9bdd4}
+@media(max-width:620px){.wheel-color-heading{align-items:stretch;flex-direction:column}.wheel-color-mode-switch{width:100%;min-width:0}.wheel-color-row{grid-template-columns:minmax(0,1fr) 44px 70px}}

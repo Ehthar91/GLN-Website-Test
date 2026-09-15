@@ -960,13 +960,19 @@ const wheelProbabilityRows=document.querySelector('#wheelProbabilityRows');
 const wheelTotalSpins=document.querySelector('#wheelTotalSpins');
 const wheelEqualWeights=document.querySelector('#wheelEqualWeights');
 const wheelResetExperiment=document.querySelector('#wheelResetExperiment');
+const wheelColorAuto=document.querySelector('#wheelColorAuto');
+const wheelColorManual=document.querySelector('#wheelColorManual');
+const wheelManualColorsPanel=document.querySelector('#wheelManualColors');
 const wheelColors=['#2563eb','#ef476f','#06b6d4','#f59e0b','#8b5cf6','#22c55e','#f97316','#ec4899','#0ea5e9','#14b8a6','#6366f1','#eab308'];
 let wheelRotation=0,wheelSpinning=false,lastWheelWinner='',wheelHistory=[];
 let wheelMode=localStorage.getItem('glnWheelMode')==='probability'?'probability':'picker';
+let wheelColorMode=localStorage.getItem('glnWheelColorMode')==='manual'?'manual':'auto';
 let wheelWeights={};
+let wheelManualColors={};
 let wheelExperimentCounts={};
 let wheelExperimentTotal=0;
 try{wheelWeights=JSON.parse(localStorage.getItem('glnWheelWeights')||'{}')||{}}catch{wheelWeights={}}
+try{wheelManualColors=JSON.parse(localStorage.getItem('glnWheelManualColors')||'{}')||{}}catch{wheelManualColors={}}
 const legacyWheelSample=['Alex','Maria','Saw Htoo','Naw Paw','Jordan','Taylor'].join('\n');
 const savedWheelEntries=localStorage.getItem('glnWheelEntries');
 if(savedWheelEntries===legacyWheelSample){localStorage.removeItem('glnWheelEntries');wheelEntries.value=''}
@@ -1017,6 +1023,37 @@ function currentWheelEntries(){
   let entries=wheelEntries.value.split(/\r?\n/).map(item=>item.trim()).filter(Boolean).slice(0,100);
   if(document.querySelector('#wheelNoDuplicates').checked)entries=[...new Set(entries)];
   return entries;
+}
+function normalizeWheelColor(value,fallback='#2563eb'){return /^#[0-9a-f]{6}$/i.test(String(value||''))?String(value).toLowerCase():fallback}
+function autoWheelColor(index){return wheelColors[index%wheelColors.length]}
+function wheelColorFor(name,index){return wheelColorMode==='manual'?normalizeWheelColor(wheelManualColors[name],autoWheelColor(index)):autoWheelColor(index)}
+function wheelTextColorFor(color){const hex=normalizeWheelColor(color).slice(1),r=parseInt(hex.slice(0,2),16),g=parseInt(hex.slice(2,4),16),b=parseInt(hex.slice(4,6),16),luma=(r*299+g*587+b*114)/1000;return luma>165?'#10213a':'#fff'}
+function saveWheelColors(){localStorage.setItem('glnWheelColorMode',wheelColorMode);localStorage.setItem('glnWheelManualColors',JSON.stringify(wheelManualColors));if(!window.__classroomToolsApplyingCloud)window.queueClassroomToolsCloudSync?.()}
+function ensureManualWheelColors(){let changed=false;currentWheelEntries().forEach((name,index)=>{if(!/^#[0-9a-f]{6}$/i.test(String(wheelManualColors[name]||''))){wheelManualColors[name]=autoWheelColor(index);changed=true}});if(changed)localStorage.setItem('glnWheelManualColors',JSON.stringify(wheelManualColors));return changed}
+function renderWheelColorControls(){
+  if(!wheelColorAuto||!wheelColorManual||!wheelManualColorsPanel)return;
+  wheelColorAuto.classList.toggle('active',wheelColorMode==='auto');wheelColorAuto.setAttribute('aria-pressed',String(wheelColorMode==='auto'));
+  wheelColorManual.classList.toggle('active',wheelColorMode==='manual');wheelColorManual.setAttribute('aria-pressed',String(wheelColorMode==='manual'));
+  wheelManualColorsPanel.hidden=wheelColorMode!=='manual';
+  wheelManualColorsPanel.innerHTML='';
+  if(wheelColorMode!=='manual')return;
+  ensureManualWheelColors();
+  const entries=currentWheelEntries();
+  if(!entries.length){const empty=document.createElement('p');empty.className='wheel-color-empty';empty.textContent='Add names above to choose colors.';wheelManualColorsPanel.appendChild(empty);return}
+  entries.forEach((name,index)=>{
+    const row=document.createElement('label');row.className='wheel-color-row';
+    const label=document.createElement('span');label.textContent=name;label.title=name;
+    const picker=document.createElement('input');picker.type='color';picker.value=wheelColorFor(name,index);picker.setAttribute('aria-label',`Color for ${name}`);
+    const value=document.createElement('code');value.textContent=picker.value.toUpperCase();
+    picker.addEventListener('input',()=>{wheelManualColors[name]=normalizeWheelColor(picker.value,autoWheelColor(index));value.textContent=wheelManualColors[name].toUpperCase();saveWheelColors();drawWheel()});
+    row.append(label,picker,value);wheelManualColorsPanel.appendChild(row);
+  });
+}
+function setWheelColorMode(mode,{persist=true}={}){
+  wheelColorMode=mode==='manual'?'manual':'auto';
+  if(wheelColorMode==='manual')ensureManualWheelColors();
+  if(persist)saveWheelColors();
+  renderWheelColorControls();drawWheel();
 }
 function normalizeWheelWeight(value){const number=Number(value);return Number.isFinite(number)?Math.max(0,Math.min(1000,number)):1}
 function wheelWeightFor(entry){return Object.prototype.hasOwnProperty.call(wheelWeights,entry)?normalizeWheelWeight(wheelWeights[entry]):1}
@@ -1075,9 +1112,9 @@ function drawWheel(){
   geometry.segments.forEach((segment,index)=>{
     if(segment.arc<=0)return;
     const start=segment.start,end=segment.end;
-    wheelContext.beginPath();wheelContext.moveTo(0,0);wheelContext.arc(0,0,radius,start,end);wheelContext.closePath();wheelContext.fillStyle=wheelColors[index%wheelColors.length];wheelContext.fill();wheelContext.strokeStyle='rgba(255,255,255,.78)';wheelContext.lineWidth=2;wheelContext.stroke();
+    const segmentColor=wheelColorFor(segment.name,index);wheelContext.beginPath();wheelContext.moveTo(0,0);wheelContext.arc(0,0,radius,start,end);wheelContext.closePath();wheelContext.fillStyle=segmentColor;wheelContext.fill();wheelContext.strokeStyle='rgba(255,255,255,.78)';wheelContext.lineWidth=2;wheelContext.stroke();
     if(segment.arc>.055){
-      wheelContext.save();wheelContext.rotate(start+segment.arc/2);wheelContext.fillStyle='#fff';wheelContext.font=`800 ${entries.length>20?11:entries.length>12?13:16}px Inter, "Noto Sans Myanmar", sans-serif`;wheelContext.textAlign='right';wheelContext.textBaseline='middle';wheelContext.shadowColor='rgba(0,0,0,.28)';wheelContext.shadowBlur=2;wheelContext.fillText(shortenedWheelText(segment.name),radius-20,0);wheelContext.restore();
+      wheelContext.save();wheelContext.rotate(start+segment.arc/2);const textColor=wheelTextColorFor(segmentColor);wheelContext.fillStyle=textColor;wheelContext.font=`800 ${entries.length>20?11:entries.length>12?13:16}px Inter, "Noto Sans Myanmar", sans-serif`;wheelContext.textAlign='right';wheelContext.textBaseline='middle';wheelContext.shadowColor=textColor==='#fff'?'rgba(0,0,0,.28)':'rgba(255,255,255,.25)';wheelContext.shadowBlur=2;wheelContext.fillText(shortenedWheelText(segment.name),radius-20,0);wheelContext.restore();
     }
   });
   wheelContext.restore();
@@ -1098,7 +1135,7 @@ function showWheelResult(name){
   lastWheelWinner=name;wheelWinnerName.textContent=name;wheelWinner.hidden=false;
   wheelHistory.unshift(name);wheelHistory=wheelHistory.slice(0,50);renderWheelHistory();
   if(wheelMode==='probability'){wheelExperimentTotal+=1;wheelExperimentCounts[name]=(wheelExperimentCounts[name]||0)+1;renderWheelProbability()}
-  const colors=wheelColors;document.querySelector('#wheelConfetti').innerHTML=Array.from({length:42},(_,index)=>`<i style="--left:${(index*37)%101}%;--delay:-${(index%9)*.17}s;--duration:${2.4+(index%7)*.2}s;--turn:${index*29}deg;--confetti:${colors[index%colors.length]}"></i>`).join('');
+  const colorEntries=currentWheelEntries(),colors=colorEntries.length?colorEntries.map((entry,index)=>wheelColorFor(entry,index)):wheelColors;document.querySelector('#wheelConfetti').innerHTML=Array.from({length:42},(_,index)=>`<i style="--left:${(index*37)%101}%;--delay:-${(index%9)*.17}s;--duration:${2.4+(index%7)*.2}s;--turn:${index*29}deg;--confetti:${colors[index%colors.length]}"></i>`).join('');
 }
 function renderWheelHistory(){
   wheelResults.innerHTML='';
@@ -1115,7 +1152,7 @@ function spinRandomWheel(){
   requestAnimationFrame(animate);
 }
 function saveAndDrawWheel(){
-  localStorage.setItem('glnWheelEntries',wheelEntries.value);resetWheelExperiment(false);drawWheel();renderWheelProbability();
+  localStorage.setItem('glnWheelEntries',wheelEntries.value);resetWheelExperiment(false);renderWheelColorControls();drawWheel();renderWheelProbability();
   if(!window.__classroomToolsApplyingCloud)window.queueClassroomToolsCloudSync?.();
 }
 document.querySelector('#spinWheel').onclick=spinRandomWheel;
@@ -1128,13 +1165,15 @@ document.querySelector('#wheelNoDuplicates').onchange=()=>{resetWheelExperiment(
 wheelSpinTime.onchange=()=>{localStorage.setItem('glnWheelSpinTime',wheelSpinTime.value);if(!window.__classroomToolsApplyingCloud)window.queueClassroomToolsCloudSync?.()};
 wheelModePicker.onclick=()=>setWheelMode('picker');
 wheelModeProbability.onclick=()=>setWheelMode('probability');
+wheelColorAuto.onclick=()=>setWheelColorMode('auto');
+wheelColorManual.onclick=()=>setWheelColorMode('manual');
 wheelEqualWeights.onclick=()=>{currentWheelEntries().forEach(name=>wheelWeights[name]=1);resetWheelExperiment(false);saveWheelWeights();drawWheel();renderWheelProbability();showToast('Probability weights set equally')};
 wheelResetExperiment.onclick=()=>{resetWheelExperiment();showToast('Probability experiment reset')};
 document.querySelector('#shuffleWheel').onclick=()=>{const entries=currentWheelEntries();for(let i=entries.length-1;i>0;i--){const j=randomWheelIndex(i+1);[entries[i],entries[j]]=[entries[j],entries[i]]}wheelEntries.value=entries.join('\n');saveAndDrawWheel()};
-document.querySelector('#clearWheel').onclick=()=>{wheelEntries.value='';wheelWeights={};saveWheelWeights();saveAndDrawWheel();wheelEntries.focus()};
+document.querySelector('#clearWheel').onclick=()=>{wheelEntries.value='';wheelWeights={};wheelManualColors={};saveWheelWeights();saveWheelColors();saveAndDrawWheel();wheelEntries.focus()};
 document.querySelector('#clearWheelResults').onclick=()=>{wheelHistory=[];renderWheelHistory();if(wheelMode==='probability')resetWheelExperiment()};
 document.querySelector('#keepWheelWinner').onclick=()=>{wheelWinner.hidden=true};
-document.querySelector('#removeWheelWinner').onclick=()=>{const entries=wheelEntries.value.split(/\r?\n/),index=entries.findIndex(item=>item.trim()===lastWheelWinner);if(index>=0)entries.splice(index,1);delete wheelWeights[lastWheelWinner];saveWheelWeights();wheelEntries.value=entries.join('\n').replace(/^\s+|\s+$/g,'');saveAndDrawWheel();wheelWinner.hidden=true};
+document.querySelector('#removeWheelWinner').onclick=()=>{const entries=wheelEntries.value.split(/\r?\n/),index=entries.findIndex(item=>item.trim()===lastWheelWinner);if(index>=0)entries.splice(index,1);delete wheelWeights[lastWheelWinner];delete wheelManualColors[lastWheelWinner];saveWheelWeights();saveWheelColors();wheelEntries.value=entries.join('\n').replace(/^\s+|\s+$/g,'');saveAndDrawWheel();wheelWinner.hidden=true};
 wheelTogglePanel.onclick=()=>{
   const collapsed=wheelPanel.classList.toggle('controls-collapsed');
   wheelTogglePanel.textContent=collapsed?'Show panel':'Hide panel';
@@ -1145,6 +1184,7 @@ wheelTogglePanel.onclick=()=>{
 document.querySelector('#wheelFullscreen').onclick=()=>{if(!document.fullscreenElement)wheelPanel.requestFullscreen?.();else document.exitFullscreen?.()};
 window.addEventListener('resize',()=>{if(!wheelPanel.hidden)drawWheel()});
 refreshWheelSeatingClasses();
+setWheelColorMode(wheelColorMode,{persist:false});
 setWheelMode(wheelMode,{persist:false});
 
 // Shared Classroom Tools cloud-sync payload. Seating Chart owns the account connection;
@@ -1157,7 +1197,9 @@ window.getClassroomToolsSyncData=()=>({
     spinTime:wheelSpinTime.value,
     seatingClass:wheelSeatingClass.value,
     mode:wheelMode,
-    weights:wheelWeights
+    weights:wheelWeights,
+    colorMode:wheelColorMode,
+    colors:wheelManualColors
   }
 });
 window.applyClassroomToolsSyncData=data=>{
@@ -1175,8 +1217,10 @@ window.applyClassroomToolsSyncData=data=>{
       if(data.wheel.spinTime!==undefined){wheelSpinTime.value=String(data.wheel.spinTime);localStorage.setItem('glnWheelSpinTime',wheelSpinTime.value)}
       if(typeof data.wheel.seatingClass==='string')localStorage.setItem('glnWheelSeatingClass',data.wheel.seatingClass);
       if(data.wheel.weights&&typeof data.wheel.weights==='object'){wheelWeights=data.wheel.weights;localStorage.setItem('glnWheelWeights',JSON.stringify(wheelWeights))}
+      if(data.wheel.colors&&typeof data.wheel.colors==='object'){wheelManualColors=data.wheel.colors;localStorage.setItem('glnWheelManualColors',JSON.stringify(wheelManualColors))}
+      if(typeof data.wheel.colorMode==='string'){wheelColorMode=data.wheel.colorMode==='manual'?'manual':'auto';localStorage.setItem('glnWheelColorMode',wheelColorMode)}
       if(typeof data.wheel.mode==='string'){wheelMode=data.wheel.mode==='probability'?'probability':'picker';localStorage.setItem('glnWheelMode',wheelMode)}
-      refreshWheelSeatingClasses();setWheelMode(wheelMode,{persist:false,resetExperiment:true});
+      refreshWheelSeatingClasses();setWheelColorMode(wheelColorMode,{persist:false});setWheelMode(wheelMode,{persist:false,resetExperiment:true});
     }
   }finally{window.__classroomToolsApplyingCloud=false}
 };
