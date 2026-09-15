@@ -40,7 +40,8 @@ function renderTarget(){const text=lessons[lessonIndex].text;const expected=expe
 function renderPracticeKeyboard(){
   practiceKeyboard.innerHTML='';
   const mobile=phoneKeyboard(),layout=rowsForLanguage(),lastRow=layout.length-1;
-  const shiftKey=label=>{const b=document.createElement('button');b.type='button';b.className='key wide shift-key';b.textContent=label;if(practiceShifted)b.classList.add('shift-required');b.onclick=()=>setPracticeShift(!practiceShifted);return b};
+  const needShift=position<lessons[lessonIndex].text.length&&expectedMapping().shift;
+  const shiftKey=label=>{const b=document.createElement('button');b.type='button';b.className='key wide shift-key';b.textContent=label;if(needShift)b.classList.add('shift-required','desktop-shift-hint');b.onclick=()=>setPracticeShift(!practiceShifted);return b};
   layout.forEach((row,rowIndex)=>{
     const el=document.createElement('div');el.className='key-row';
     if(!mobile&&rowIndex===lastRow)el.appendChild(shiftKey('⇧ Shift'));

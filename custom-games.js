@@ -307,9 +307,9 @@ function renderEasyCustomKeyboard(box){
   const expected=customExpected(),needShift=expected?.shift||false,mobile=phoneKeyboard(),layout=rowsForLanguage(customGameLanguage()),lastRow=layout.length-1;
   layout.forEach((row,rowIndex)=>{
     const line=document.createElement('div');line.className='key-row';
-    if(!mobile&&rowIndex===lastRow)line.appendChild(customControl('⇧ Shift',()=>{},needShift));
+    if(!mobile&&rowIndex===lastRow){const leftShift=customControl('⇧ Shift',()=>{},needShift);if(needShift)leftShift.classList.add('desktop-shift-hint');line.appendChild(leftShift)}
     row.forEach(([key,normal,shift])=>{const b=document.createElement('button');b.type='button';b.className='key';b.dataset.code=key;b.innerHTML=`<small>${key}</small>${needShift?shift:normal}`;if(expected?.key===key)b.classList.add('expected');b.onclick=()=>acceptCustomInput(needShift?shift:normal);line.appendChild(b)});
-    if(!mobile&&rowIndex===lastRow)line.appendChild(customControl('Shift ⇧',()=>{},needShift));
+    if(!mobile&&rowIndex===lastRow){const rightShift=customControl('Shift ⇧',()=>{},needShift);if(needShift)rightShift.classList.add('desktop-shift-hint');line.appendChild(rightShift)}
     if(rowIndex===0)line.appendChild(customControl('Backspace',customBackspace));box.appendChild(line)
   });
   const bottom=document.createElement('div');bottom.className='key-row';

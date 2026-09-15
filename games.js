@@ -26,14 +26,14 @@ function renderGameKeyboard(){
   layout.forEach((row,rowIndex)=>{
     const line=document.createElement('div');line.className='key-row';
     if(mobile&&rowIndex===lastRow)line.appendChild(gameControl('Shift',()=>{},shifted));
-    if(!mobile&&rowIndex===lastRow)line.appendChild(gameControl('⇧ Shift',()=>{},shifted));
+    if(!mobile&&rowIndex===lastRow){const leftShift=gameControl('⇧ Shift',()=>{},shifted);if(shifted)leftShift.classList.add('desktop-shift-hint');line.appendChild(leftShift)}
     row.forEach(([key,normal,shift])=>{
       const b=document.createElement('button');b.type='button';b.className='key';b.dataset.code=key;b.innerHTML=`<small>${key}</small>${shifted?shift:normal}`;
       if(activeGame!=='match'&&expected&&expected.key===key)b.classList.add('expected');
       b.onclick=()=>acceptGameInput(shifted?shift:normal,key,shifted);line.appendChild(b)
     });
     if(mobile&&rowIndex===lastRow)line.appendChild(gameControl('⌫',gameBackspace));
-    if(!mobile&&rowIndex===lastRow)line.appendChild(gameControl('Shift ⇧',()=>{},shifted));
+    if(!mobile&&rowIndex===lastRow){const rightShift=gameControl('Shift ⇧',()=>{},shifted);if(shifted)rightShift.classList.add('desktop-shift-hint');line.appendChild(rightShift)}
     if(!mobile&&rowIndex===0)line.appendChild(gameControl('Backspace',gameBackspace));
     if(!mobile&&rowIndex===2)line.appendChild(gameControl('Enter',()=>{}));
     box.appendChild(line)
