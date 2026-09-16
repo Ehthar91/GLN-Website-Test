@@ -28,7 +28,7 @@
   <link rel="stylesheet" href="quiz-print.css?v=20260913-2" />
   <link rel="stylesheet" href="calculator.css?v=20260915-wheel-colors-1" />
   <link rel="stylesheet" href="event-signup.css?v=20260912-14" />
-  <link rel="stylesheet" href="seating.css?v=20260913-43" />
+  <link rel="stylesheet" href="seating.css?v=20260916-classroom-sync-1" />
   <link rel="stylesheet" href="rgb-theme.css?v=20260916-all-points-1" />
   <link rel="stylesheet" href="keyboard-realistic.css?v=20260915-unified-keyboard-1" />
 </head>
@@ -733,6 +733,19 @@ Fish = ညၣ်</textarea>
           <aside class="seating-setup seating-class-panel" id="seatingClassPanel">
             <div class="panel-heading"><strong>Classes</strong><button id="closeClassPanel" type="button" aria-label="Close classes">×</button></div>
             <div class="class-manager"><label class="select-class-fallback">Saved class<select id="seatingClassSelect" aria-label="Choose a saved class"></select></label><div class="seating-class-list" id="seatingClassList" aria-label="Saved classes"></div><div><button class="button primary" id="newSeatingClass" type="button">＋ New class</button><button class="button ghost" id="duplicateSeatingClass" type="button">Duplicate</button><button class="button danger" id="deleteSeatingClass" type="button">Delete</button></div><div class="reuse-layout"><label>Use layout from<select id="seatingLayoutSource" aria-label="Choose a class layout to copy"></select></label><button class="button ghost" id="useClassLayout" type="button">Use this layout</button><small>Names in this class will not change.</small></div></div>
+            <details class="google-classroom-sync" id="googleClassroomSync">
+              <summary><span>Google Classroom</span><b id="googleClassroomLinkBadge">Not linked</b></summary>
+              <div class="google-classroom-sync-body">
+                <p>Import the classes you teach and keep their student rosters synced. GLN only reads Classroom data; it never changes your Google Classroom.</p>
+                <button class="button google-classroom-connect" id="googleClassroomConnect" type="button">Connect &amp; load classes</button>
+                <button class="button ghost" id="googleClassroomSyncCurrent" type="button" hidden>↻ Sync this class roster</button>
+                <div class="google-classroom-course-tools" id="googleClassroomCourseTools" hidden><button type="button" id="googleClassroomSelectAll">Select all</button><button type="button" id="googleClassroomSelectNone">None</button></div>
+                <div class="google-classroom-course-list" id="googleClassroomCourseList" hidden aria-label="Google Classroom classes"></div>
+                <button class="button primary" id="googleClassroomImportSelected" type="button" hidden>Import selected classes</button>
+                <small id="googleClassroomStatus">Connect your school Google account to load your active classes.</small>
+                <small class="google-classroom-privacy">Read-only roster sync · desk positions and locked seats stay in GLN. <a href="GOOGLE-CLASSROOM-SETUP.md" target="_blank" rel="noopener">Setup guide</a></small>
+              </div>
+            </details>
             <label>Class name<input id="seatingClassName" value="My Class" maxlength="50" /></label>
             <label class="roster-field">Student names <span id="seatingRosterCount">6 students</span><textarea id="seatingRoster" rows="11" spellcheck="false" placeholder="Enter one student per line">Alex
 Maria
@@ -841,7 +854,7 @@ Taylor</textarea><small>Enter one student per line.</small></label>
   <script src="quiz-kiosk.js?v=20260913-1"></script>
   <script src="calculator.js?v=20260915-probability-popup-1"></script>
   <script src="event-signup.js?v=20260912-15"></script>
-  <script src="seating.js?v=20260913-42"></script>
+  <script src="seating.js?v=20260916-classroom-sync-1"></script>
   <script src="rgb-theme.js?v=20260911-2"></script>
 </body>
 </html>
