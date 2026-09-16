@@ -123,23 +123,6 @@ body.desktop-keyboard-ui .keyboard .key[data-code="j"]::after{
   opacity:.82;
 }
 
-/* Practice/easy-game/quiz rows don't always include Tab/Caps controls.
-   Give those simplified keyboards the same stagger as a physical QWERTY board. */
-body.desktop-keyboard-ui #practiceKeyboard>.key-row,
-body.desktop-keyboard-ui #gameKeyboard>.key-row,
-body.desktop-keyboard-ui #quizKeyboard>.key-row{
-  min-width:760px;
-}
-body.desktop-keyboard-ui #practiceKeyboard>.key-row:nth-child(2),
-body.desktop-keyboard-ui #gameKeyboard>.key-row:nth-child(2),
-body.desktop-keyboard-ui #quizKeyboard>.key-row:nth-child(2){padding-left:18px;padding-right:18px}
-body.desktop-keyboard-ui #practiceKeyboard>.key-row:nth-child(3),
-body.desktop-keyboard-ui #gameKeyboard>.key-row:nth-child(3),
-body.desktop-keyboard-ui #quizKeyboard>.key-row:nth-child(3){padding-left:30px;padding-right:30px}
-body.desktop-keyboard-ui #practiceKeyboard>.key-row:nth-child(4),
-body.desktop-keyboard-ui #gameKeyboard>.key-row:nth-child(4),
-body.desktop-keyboard-ui #quizKeyboard>.key-row:nth-child(4){padding-left:42px;padding-right:42px}
-
 /* Preserve learning states but give them the same physical key depth. */
 body.desktop-keyboard-ui .keyboard .key.expected{
   box-shadow:
