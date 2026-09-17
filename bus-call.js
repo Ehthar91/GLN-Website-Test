@@ -6,7 +6,7 @@
   const connection=q('#busCallConnection'),setup=q('#busCallSetup'),callerConsole=q('#busCallerConsole'),teacherConsole=q('#busClassroomConsole'),errorEl=q('#busCallError');
   const popup=q('#busCallPopup'),popupGrid=q('#busPopupActiveGrid'),popupTime=q('#busPopupTime'),popupStage=q('#busPopupStage');
   let busDb=null,busUser=null,callerAuth=null,callerDatabase=null,googleCallerAuth=null,googleCallerDatabase=null;
-  let role='',code='',room=null,unsubscribe=null,presenceDisconnect=null,lastCallId='',lastCombinedCallId='',seenAddOnIds=new Set(),audioContext=null,selectedStage='first',callerCodeEditing=false;
+  let role='',code='',room=null,unsubscribe=null,presenceDisconnect=null,lastCallId='',lastCombinedCallId='',seenAddOnIds=new Set(),audioContext=null,selectedStage='first',callerCodeEditing=false,lineupTarget='main';
   let callerDisconnect=null,callerHeartbeatTimer=null,sessionExpiryTimer=null,historyPruneBusy=false;
   let teacherDisplayName='',teacherPresenceAttached=false;
   const teacherSetup=q('#busTeacherSetup');
@@ -161,6 +161,20 @@
     renderDuplicateWarning('#busNumberInput','#busMainDuplicateWarning');
     renderDuplicateWarning('#busAddOnNumberInput','#busAddOnDuplicateWarning');
   }
+  function setLineupTarget(target){
+    lineupTarget=target==='addon'?'addon':'main';
+    const main=q('#busNumberInput'),addOn=q('#busAddOnNumberInput'),label=q('#busRosterTargetLabel');
+    main?.classList.toggle('bus-lineup-target',lineupTarget==='main');
+    addOn?.classList.toggle('bus-lineup-target',lineupTarget==='addon');
+    if(label)label.textContent=lineupTarget==='addon'?'Add-On Bus':'Main Bus';
+    if(room)renderSchoolBusRoster(room);
+  }
+  function addRosterBusToTarget(number){
+    const input=q(lineupTarget==='addon'?'#busAddOnNumberInput':'#busNumberInput');if(!input)return;
+    const current=parseBusNumbers(input.value);
+    if(!current.some(item=>busNumberKey(item)===busNumberKey(number)))current.push(number);
+    input.value=current.join(' ');input.dispatchEvent(new Event('input',{bubbles:true}));input.focus();
+  }
   function renderSchoolBusRoster(value){
     const roster=schoolBusRosterNumbers(value),called=calledBusSet(value?.history),remaining=roster.filter(number=>!called.has(busNumberKey(number)));
     const input=q('#busSchoolRosterInput'),count=q('#busRosterRemainingCount'),progress=q('#busRosterProgressText'),list=q('#busRosterRemainingList'),clear=q('#clearBusSchoolRoster');
@@ -176,7 +190,21 @@
     count.textContent=`${remaining.length} bus${remaining.length===1?'':'es'} left`;
     progress.textContent=`${calledCount} of ${roster.length} bus${roster.length===1?'':'es'} called in the current history window.`;
     if(!remaining.length){const done=document.createElement('span');done.className='bus-roster-complete';done.textContent='✓ All school buses have been called.';list.append(done);return}
-    remaining.forEach(number=>{const chip=document.createElement('span');chip.className='bus-roster-chip';chip.textContent=number;list.append(chip)});
+    const mainSelected=new Set(parseBusNumbers(q('#busNumberInput')?.value||'').map(busNumberKey));
+    const addOnSelected=new Set(parseBusNumbers(q('#busAddOnNumberInput')?.value||'').map(busNumberKey));
+    remaining.forEach(number=>{
+      const chip=document.createElement('button');chip.type='button';chip.className='bus-roster-chip';chip.textContent=number;chip.title=`Add Bus ${number} to ${lineupTarget==='addon'?'Add-On Bus':'Main Bus'}`;
+      const key=busNumberKey(number);if(mainSelected.has(key))chip.classList.add('selected-main');if(addOnSelected.has(key))chip.classList.add('selected-addon');
+      chip.addEventListener('click',()=>addRosterBusToTarget(number));list.append(chip)
+    });
+  }
+  function renderTeacherSchoolBusRoster(value){
+    const panel=q('#busTeacherRosterPanel'),count=q('#busTeacherRosterCount'),list=q('#busTeacherRosterList');if(!panel||!count||!list)return;
+    const roster=schoolBusRosterNumbers(value),called=calledBusSet(value?.history),remaining=roster.filter(number=>!called.has(busNumberKey(number)));
+    panel.hidden=!roster.length;if(!roster.length){list.innerHTML='';count.textContent='0 buses';return}
+    count.textContent=remaining.length?`${remaining.length} bus${remaining.length===1?'':'es'}`:'All called';list.innerHTML='';
+    if(!remaining.length){const done=document.createElement('span');done.className='bus-teacher-roster-done';done.textContent='✓ All school buses have been called.';list.append(done);return}
+    remaining.forEach(number=>{const chip=document.createElement('span');chip.className='bus-teacher-roster-chip';chip.textContent=number;list.append(chip)});
   }
   const callStageLabel=stage=>({first:'First Call',second:'Second Call',last:'Last Call'}[stage]||'Bus Call');
   const callStageClass=stage=>['first','second','last'].includes(stage)?stage:'first';
@@ -466,6 +494,7 @@
     showActivePopup(value||room,{heading:'🚌 ALL ACTIVE BUSES',timeLabel:`${callStagesLabel(call)} • Called at ${formatTime(call.calledAt)}`});
   }
   function renderTeacher(value){
+    renderTeacherSchoolBusRoster(value);
     const regular=value.currentCall||null,regulars=activeRegularCalls(value),addOns=activeAddOnCalls(value),active=allActiveCalls(value);
     const hasActive=active.length>0,waiting=q('.bus-classroom-waiting');
     if(waiting)waiting.classList.toggle('has-active-calls',hasActive);
@@ -507,13 +536,14 @@
       if(!snap.exists()){
         room=null;
         if(role==='teacher'){
-          stopPresence(false).catch(()=>{});setError('');
+          stopPresence(false).catch(()=>{});setError('');renderTeacherSchoolBusRoster({});
           renderTeacherWaiting('This room is not live yet. Keep this screen open and it will connect automatically as soon as the caller starts this room.');
           return;
         }
         setError('This Bus Call room was closed or no longer exists.');setConnection('Room closed','problem');renderActiveCallBoard({});const closedLabel=q('#busBoardLabel');if(closedLabel)closedLabel.textContent='ROOM CLOSED';stopWatch();popup.hidden=true;return;
       }
       room=snap.val()||{};
+      if(role==='teacher')renderTeacherSchoolBusRoster(room);
       if(role==='caller'&&room.hostUid!==busUser.uid){stopWatch();resetUi();setError('This code now belongs to another caller. Choose a different code.');return}
       const inactive=room.status==='closed'||(room.expiresAt&&room.expiresAt<Date.now())||sessionExpired(room);
       if(inactive&&role==='teacher'){
@@ -834,8 +864,12 @@
   q('#saveBusSchoolRoster').addEventListener('click',saveSchoolBusRoster);
   q('#clearBusSchoolRoster').addEventListener('click',clearSchoolBusRoster);
   q('#busSchoolRosterInput').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();saveSchoolBusRoster()}});
-  q('#busNumberInput').addEventListener('input',renderDuplicateWarnings);
-  q('#busAddOnNumberInput').addEventListener('input',renderDuplicateWarnings);
+  q('#busNumberInput').addEventListener('input',()=>{renderDuplicateWarnings();if(room)renderSchoolBusRoster(room)});
+  q('#busAddOnNumberInput').addEventListener('input',()=>{renderDuplicateWarnings();if(room)renderSchoolBusRoster(room)});
+  q('#busNumberInput').addEventListener('focus',()=>setLineupTarget('main'));
+  q('#busNumberInput').addEventListener('click',()=>setLineupTarget('main'));
+  q('#busAddOnNumberInput').addEventListener('focus',()=>setLineupTarget('addon'));
+  q('#busAddOnNumberInput').addEventListener('click',()=>setLineupTarget('addon'));
   q('#changeBusRoomCode').addEventListener('click',changeRoomCode);
   q('#leaveBusCaller').addEventListener('click',leaveRoom);
   q('#busCallerRoomChoice').addEventListener('click',()=>{const saved=getSavedCallerCode();if(!saved)return;callerCodeEditing=!callerCodeEditing;if(callerCodeEditing){q('#busCallerCodeInput').value='';setTimeout(()=>q('#busCallerCodeInput').focus(),0)}else q('#busCallerCodeInput').value=saved;updateCallerResumeUi()});
@@ -861,4 +895,5 @@
   callerCodeEditing=!getSavedCallerCode();updateCallerResumeUi();
   setCallStage('first');
   setAddOnStages(['first']);
+  setLineupTarget('main');
 })();
