@@ -322,4 +322,43 @@ body.bus-fullscreen-open{overflow:hidden}
 @keyframes busStageBeacon{0%,100%{opacity:1;transform:scale(1);box-shadow:0 0 0 0 rgba(37,99,235,.25)}50%{opacity:.38;transform:scale(.97);box-shadow:0 0 0 10px rgba(37,99,235,0)}}
 @media(prefers-reduced-motion:reduce){.bus-popup-stage.bus-stage-flash{animation:none!important}}
 @media(max-width:700px){.bus-popup-status-row{padding:0 54px!important}.bus-popup-stage.bus-stage-flash{min-width:0;max-width:100%;font-size:clamp(20px,7vw,42px)!important;white-space:normal}.bus-popup-status-row time{display:none!important}}
-\n\n/* 2026-09-17: Add-On buses flash their own stage badge when it differs from the main call. */\n.bus-call-tile-label.bus-tile-stage-flash{\n  width:max-content!important;\n  max-width:96%!important;\n  box-sizing:border-box!important;\n  padding:clamp(5px,1cqh,10px) clamp(9px,1.5cqw,18px)!important;\n  border:clamp(2px,.22vw,4px) solid currentColor!important;\n  border-radius:999px!important;\n  white-space:nowrap!important;\n  overflow:hidden!important;\n  text-overflow:ellipsis!important;\n  animation:busTileStageBeacon .78s ease-in-out infinite!important;\n}\n.bus-call-tile-label.bus-tile-stage-flash.first{background:#dbeafe!important;color:#1d4ed8!important}\n.bus-call-tile-label.bus-tile-stage-flash.second{background:#fef3c7!important;color:#92400e!important}\n.bus-call-tile-label.bus-tile-stage-flash.last{background:#fee2e2!important;color:#b91c1c!important}\n.bus-display-call-card.addon.addon-stage-different,.bus-popup-call-tile.addon.addon-stage-different{box-shadow:inset 0 0 0 2px rgba(124,58,237,.14),0 0 0 0 rgba(124,58,237,.24)}\n@keyframes busTileStageBeacon{0%,100%{opacity:1;transform:scale(1);box-shadow:0 0 0 0 currentColor}50%{opacity:.42;transform:scale(.96);box-shadow:0 0 0 8px rgba(124,58,237,0)}}\n@media(prefers-reduced-motion:reduce){.bus-call-tile-label.bus-tile-stage-flash{animation:none!important}}\n@container (max-height:110px){.bus-call-tile-label.bus-tile-stage-flash{display:block!important;font-size:clamp(8px,4cqh,14px)!important;padding:3px 6px!important}}\n
+
+
+/* 2026-09-17: Add-On buses flash their own stage badge when it differs from the main call. */
+.bus-call-tile-label.bus-tile-stage-flash{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  width:max-content!important;
+  max-width:96%!important;
+  box-sizing:border-box!important;
+  padding:clamp(5px,1cqh,10px) clamp(9px,1.5cqw,18px)!important;
+  border:clamp(2px,.22vw,4px) solid currentColor!important;
+  border-radius:999px!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  animation:busTileStageBeacon .95s ease-in-out infinite!important;
+}
+.bus-call-tile-label.bus-tile-stage-flash.first{background:#dbeafe!important;color:#1d4ed8!important}
+.bus-call-tile-label.bus-tile-stage-flash.second{background:#fef3c7!important;color:#92400e!important}
+.bus-call-tile-label.bus-tile-stage-flash.last{background:#fee2e2!important;color:#b91c1c!important}
+.bus-display-call-card.addon.addon-stage-different,
+.bus-popup-call-tile.addon.addon-stage-different{
+  outline:clamp(2px,.22vw,4px) solid rgba(124,58,237,.42)!important;
+  outline-offset:-3px!important;
+}
+@keyframes busTileStageBeacon{
+  0%,100%{opacity:1;transform:scale(1);box-shadow:0 0 0 0 currentColor}
+  50%{opacity:.5;transform:scale(.96);box-shadow:0 0 0 8px transparent}
+}
+@media(prefers-reduced-motion:reduce){
+  .bus-call-tile-label.bus-tile-stage-flash{animation:none!important;outline:4px solid currentColor!important}
+}
+@container (max-height:110px){
+  .bus-call-tile-label.bus-tile-stage-flash{
+    display:inline-flex!important;
+    font-size:clamp(8px,4cqh,14px)!important;
+    padding:3px 6px!important;
+  }
+}
