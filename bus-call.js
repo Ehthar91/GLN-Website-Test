@@ -141,20 +141,39 @@
     recentHistoryItems(history).forEach(item=>callBusNumbers(item).forEach(number=>called.add(busNumberKey(number))));
     return called;
   }
-  function duplicateBusInfo(numbers){
-    const active=new Set(allActiveCalls(room).map(item=>busNumberKey(item.number)));
-    const history=calledBusSet(room?.history);
-    const activeDup=[],historyDup=[];
-    numbers.forEach(number=>{const key=busNumberKey(number);if(active.has(key))activeDup.push(number);if(history.has(key))historyDup.push(number)});
-    return {active:activeDup,history:historyDup};
+  function stagesByBusFromCalls(calls){
+    const map=new Map();
+    (calls||[]).forEach(call=>{
+      const stages=callStagesFor(call);
+      callBusNumbers(call).forEach(number=>{
+        const key=busNumberKey(number);if(!key)return;
+        if(!map.has(key))map.set(key,new Set());
+        stages.forEach(stage=>map.get(key).add(stage));
+      });
+    });
+    return map;
   }
-  async function confirmDuplicateSend(numbers,{kind='Bus'}={}){
-    const duplicates=duplicateBusInfo(numbers),parts=[];
-    if(duplicates.active.length)parts.push(`Already active: ${duplicates.active.join(', ')}`);
-    if(duplicates.history.length)parts.push(`Already in Recent Calls: ${duplicates.history.join(', ')}`);
-    if(!parts.length)return true;
-    const label=numbers.length===1?`${kind} ${numbers[0]}`:`These ${kind.toLowerCase()} numbers`;
-    return confirmBusAction(`${label} may already have been called. ${parts.join(' • ')}. Send this call anyway?`,{confirmLabel:'Send Anyway',danger:false,title:'Bus already active or called',icon:'⚠️'});
+  function duplicateBusInfo(numbers,requestedStages){
+    const requested=normalizeStageList(requestedStages);
+    const active=stagesByBusFromCalls(allActiveCalls(room));
+    const history=stagesByBusFromCalls(recentHistoryItems(room?.history));
+    const duplicates=[];
+    numbers.forEach(number=>{
+      const key=busNumberKey(number),seen=new Set();
+      (active.get(key)||[]).forEach(stage=>seen.add(stage));
+      (history.get(key)||[]).forEach(stage=>seen.add(stage));
+      const repeated=requested.filter(stage=>seen.has(stage));
+      if(repeated.length)duplicates.push({number,stages:repeated});
+    });
+    return duplicates;
+  }
+  async function confirmDuplicateSend(numbers,{kind='Bus',stages=['first']}={}){
+    const requested=normalizeStageList(stages),duplicates=duplicateBusInfo(numbers,requested);
+    if(!duplicates.length)return true;
+    const details=duplicates.map(item=>`${item.number} — ${stageListLabel(item.stages)} already sent`).join(' • ');
+    const callLabel=stageListLabel(requested);
+    const subject=numbers.length===1?`${kind} ${numbers[0]}`:`One or more ${kind.toLowerCase()} numbers`;
+    return confirmBusAction(`${subject} already received part of this ${callLabel}. ${details}. Send anyway?`,{confirmLabel:'Send Anyway',danger:false,title:'Call stage already sent',icon:'⚠️'});
   }
   function setLineupTarget(target){
     lineupTarget=target==='addon'?'addon':'main';
@@ -686,7 +705,7 @@
     const numbers=parseBusNumbers(q('#busNumberInput').value),note=cleanText(q('#busCallNoteInput').value,80),sentStage=selectedStage;
     if(!numbers.length){setError('Enter one or more main bus numbers. Separate multiple buses with spaces.');q('#busNumberInput').focus();return}
     if(numbers.length>12){setError('Enter up to 12 main buses at one time.');q('#busNumberInput').focus();return}
-    if(!await confirmDuplicateSend(numbers,{kind:'Bus'})){q('#busNumberInput').focus();return}
+    if(!await confirmDuplicateSend(numbers,{kind:'Bus',stages:[sentStage]})){q('#busNumberInput').focus();return}
     setError('');const button=q('#sendBusCall');button.disabled=true;
     try{
       const id=`${Date.now()}-${Math.random().toString(36).slice(2,7)}`,stamp=fb.serverTimestamp();
@@ -726,7 +745,7 @@
     if(!numbers.length){setError('Enter one or more add-on bus numbers. Separate multiple buses with spaces.');q('#busAddOnNumberInput').focus();return}
     if(numbers.length>12){setError('Enter up to 12 add-on buses at one time.');q('#busAddOnNumberInput').focus();return}
     if(!stages.length){setError('Select at least one call type for the add-on bus.');return}
-    if(!await confirmDuplicateSend(numbers,{kind:'Add-On Bus'})){q('#busAddOnNumberInput').focus();return}
+    if(!await confirmDuplicateSend(numbers,{kind:'Add-On Bus',stages})){q('#busAddOnNumberInput').focus();return}
     setError('');const button=q('#sendBusAddOn');button.disabled=true;
     try{
       const stamp=fb.serverTimestamp(),updates={combinedCall:null,lastActivityAt:stamp,callerLastActiveAt:stamp};
