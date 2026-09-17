@@ -118,6 +118,66 @@
     for(const part of parts){const key=part.toUpperCase();if(seen.has(key))continue;seen.add(key);numbers.push(part)}
     return numbers;
   };
+  const busNumberKey=value=>cleanText(value,18).toUpperCase();
+  const valuesArray=value=>Array.isArray(value)?value:(value&&typeof value==='object'?Object.values(value):[]);
+  function schoolBusRosterNumbers(value){
+    const raw=valuesArray(value?.schoolBusRoster);
+    const seen=new Set(),numbers=[];
+    raw.forEach(item=>{const number=cleanText(item,18),key=busNumberKey(number);if(number&&key&&!seen.has(key)){seen.add(key);numbers.push(number)}});
+    return numbers;
+  }
+  function callBusNumbers(call){
+    const listed=valuesArray(call?.numbers).map(item=>cleanText(item,18)).filter(Boolean);
+    if(listed.length)return listed;
+    const fallback=String(call?.number||'').replace(/\s*\+\s*/g,' ');
+    return parseBusNumbers(fallback);
+  }
+  function recentHistoryItems(history){
+    const cutoff=Date.now()-HISTORY_RETENTION_MS;
+    return Object.values(history||{}).filter(item=>item&&(!Number(item.calledAt)||Number(item.calledAt)>cutoff));
+  }
+  function calledBusSet(history){
+    const called=new Set();
+    recentHistoryItems(history).forEach(item=>callBusNumbers(item).forEach(number=>called.add(busNumberKey(number))));
+    return called;
+  }
+  function duplicateBusInfo(numbers){
+    const active=new Set(allActiveCalls(room).map(item=>busNumberKey(item.number)));
+    const history=calledBusSet(room?.history);
+    const activeDup=[],historyDup=[];
+    numbers.forEach(number=>{const key=busNumberKey(number);if(active.has(key))activeDup.push(number);if(history.has(key))historyDup.push(number)});
+    return {active:activeDup,history:historyDup};
+  }
+  function renderDuplicateWarning(inputSelector,warningSelector){
+    const input=q(inputSelector),warning=q(warningSelector);if(!input||!warning)return;
+    const numbers=parseBusNumbers(input.value),duplicates=duplicateBusInfo(numbers),parts=[];
+    if(duplicates.active.length)parts.push(`Already active: ${duplicates.active.join(', ')}`);
+    if(duplicates.history.length)parts.push(`Already in Recent Calls: ${duplicates.history.join(', ')}`);
+    warning.textContent=parts.length?`⚠ ${parts.join(' • ')}. You can still send the call if this is intentional.`:'';
+    warning.hidden=!parts.length;
+    input.classList.toggle('bus-duplicate-input',parts.length>0);
+  }
+  function renderDuplicateWarnings(){
+    renderDuplicateWarning('#busNumberInput','#busMainDuplicateWarning');
+    renderDuplicateWarning('#busAddOnNumberInput','#busAddOnDuplicateWarning');
+  }
+  function renderSchoolBusRoster(value){
+    const roster=schoolBusRosterNumbers(value),called=calledBusSet(value?.history),remaining=roster.filter(number=>!called.has(busNumberKey(number)));
+    const input=q('#busSchoolRosterInput'),count=q('#busRosterRemainingCount'),progress=q('#busRosterProgressText'),list=q('#busRosterRemainingList'),clear=q('#clearBusSchoolRoster');
+    if(input&&document.activeElement!==input)input.value=roster.join(' ');
+    if(clear)clear.hidden=!roster.length;
+    if(!count||!progress||!list)return;
+    list.innerHTML='';
+    if(!roster.length){
+      count.textContent='Bus list not set';progress.textContent='Enter your school bus numbers to track what is still waiting to be called.';
+      const empty=document.createElement('span');empty.className='bus-roster-empty';empty.textContent='No school bus lineup saved yet.';list.append(empty);return;
+    }
+    const calledCount=roster.length-remaining.length;
+    count.textContent=`${remaining.length} bus${remaining.length===1?'':'es'} left`;
+    progress.textContent=`${calledCount} of ${roster.length} bus${roster.length===1?'':'es'} called in the current history window.`;
+    if(!remaining.length){const done=document.createElement('span');done.className='bus-roster-complete';done.textContent='✓ All school buses have been called.';list.append(done);return}
+    remaining.forEach(number=>{const chip=document.createElement('span');chip.className='bus-roster-chip';chip.textContent=number;list.append(chip)});
+  }
   const callStageLabel=stage=>({first:'First Call',second:'Second Call',last:'Last Call'}[stage]||'Bus Call');
   const callStageClass=stage=>['first','second','last'].includes(stage)?stage:'first';
   const callStageOrder=['first','second','last'];
@@ -382,7 +442,7 @@
     q('#busCodeReservation').textContent=activeAt?`Code reserved until ${new Date(activeAt+RESERVATION_MS).toLocaleDateString()}. Using caller controls renews it for 30 days.`:'This code is reserved for its caller.';
     const listeners=Object.values(value.players||{}).filter(item=>item?.connected!==false);
     q('#busListenerCount').textContent=`${listeners.length} classroom${listeners.length===1?'':'s'} online`;
-    renderHistory(value.history);renderCallerBusTools(value);
+    renderHistory(value.history);renderCallerBusTools(value);renderSchoolBusRoster(value);renderDuplicateWarnings();
     const addOns=activeAddOnCalls(value),suffix=addOns.length?` • ${addOns.length} add-on bus${addOns.length===1?'':'es'} also active.`:'';
     if(value.combinedCall){
       const combined=value.combinedCall,numbers=Array.isArray(combined.numbers)?combined.numbers.filter(Boolean):[];
@@ -548,7 +608,8 @@
       const result=await fb.runTransaction(roomRef(selected),value=>{
         if(value&&value.hostUid!==user.uid&&!reservationExpired(value))return;
         const active=value&&value.hostUid===user.uid&&value.status!=='closed'&&(!value.expiresAt||value.expiresAt>Date.now())&&!sessionExpired(value);
-        const next=active?{...value}:{hostUid:user.uid,status:'open',createdAt:fb.serverTimestamp(),expiresAt:Date.now()+ROOM_MS};
+        const preservedRoster=value&&value.hostUid===user.uid?schoolBusRosterNumbers(value):[];
+        const next=active?{...value}:{hostUid:user.uid,status:'open',createdAt:fb.serverTimestamp(),expiresAt:Date.now()+ROOM_MS,...(preservedRoster.length?{schoolBusRoster:preservedRoster}:{})};
         next.callerLastActiveAt=fb.serverTimestamp();next.callerHeartbeatAt=fb.serverTimestamp();next.callerDisconnectedAt=null;next.sessionExpiresAt=Date.now()+SESSION_IDLE_MS;
         if(accountKey)next.pinAccountKey=accountKey;else delete next.pinAccountKey;
         return next;
@@ -704,7 +765,25 @@
       q('#busNumberInput').focus();
     }catch(error){setError(friendlyError(error))}
   }
-  async function clearHistory(){if(role!=='caller'||!code)return;if(!await confirmBusAction('Clear the recent Bus Call history for this room?',{confirmLabel:'Clear History'}))return;try{await fb.update(roomRef(code),{history:null,callerLastActiveAt:fb.serverTimestamp()});q('#busCallerStatus').textContent='Recent call history cleared.'}catch(error){setError(friendlyError(error))}}
+  async function saveSchoolBusRoster(){
+    if(role!=='caller'||!code)return;
+    const input=q('#busSchoolRosterInput'),numbers=parseBusNumbers(input?.value||'');
+    if(!numbers.length){setError('Enter at least one school bus number. Separate buses with spaces.');input?.focus();return}
+    if(numbers.length>150){setError('Enter up to 150 school buses in the lineup.');input?.focus();return}
+    const button=q('#saveBusSchoolRoster');button.disabled=true;setError('');
+    try{
+      await fb.update(roomRef(code),{schoolBusRoster:numbers,callerLastActiveAt:fb.serverTimestamp(),lastActivityAt:fb.serverTimestamp()});
+      q('#busCallerStatus').textContent=`School bus lineup saved: ${numbers.length} bus${numbers.length===1?'':'es'}.`;
+    }catch(error){setError(friendlyError(error))}finally{button.disabled=false}
+  }
+  async function clearSchoolBusRoster(){
+    if(role!=='caller'||!code)return;
+    const roster=schoolBusRosterNumbers(room);
+    if(!roster.length){q('#busSchoolRosterInput').value='';renderSchoolBusRoster(room);return}
+    if(!await confirmBusAction('Clear the saved school bus lineup? This does not clear active buses or Recent Calls.',{confirmLabel:'Clear Bus List'}))return;
+    try{await fb.update(roomRef(code),{schoolBusRoster:null,callerLastActiveAt:fb.serverTimestamp(),lastActivityAt:fb.serverTimestamp()});q('#busCallerStatus').textContent='School bus lineup cleared.'}catch(error){setError(friendlyError(error))}
+  }
+  async function clearHistory(){if(role!=='caller'||!code)return;if(!await confirmBusAction('Clear the recent Bus Call history for this room? The school bus tracker will reset every saved bus to not called yet.',{confirmLabel:'Clear History'}))return;try{await fb.update(roomRef(code),{history:null,callerLastActiveAt:fb.serverTimestamp()});q('#busCallerStatus').textContent='Recent call history cleared. The school bus tracker is reset.'}catch(error){setError(friendlyError(error))}}
   async function changeRoomCode(){
     if(role!=='caller'||!code||q('#changeBusRoomCode').disabled||q('#connectBusGoogle').disabled||q('#sendBusCall').disabled)return;
     const entered=prompt('Enter a new room code (4–8 letters or numbers). Your current code will remain reserved.', '');
@@ -724,6 +803,7 @@
         // Never overwrite another active reservation, including a different room owned by this caller.
         if(value&&!reservationExpired(value))return;
         const next={hostUid:busUser.uid,status:'open',createdAt:fb.serverTimestamp(),expiresAt:Date.now()+ROOM_MS,callerLastActiveAt:fb.serverTimestamp(),callerHeartbeatAt:fb.serverTimestamp(),callerDisconnectedAt:null,sessionExpiresAt:Date.now()+SESSION_IDLE_MS};
+        const sourceRoster=schoolBusRosterNumbers(source);if(sourceRoster.length)next.schoolBusRoster=sourceRoster;
         if(source.pinAccountKey)next.pinAccountKey=source.pinAccountKey;
         else if(!busUser.providerData?.some(provider=>provider.providerId==='google.com'))next.pinAccountKey=previous.toLowerCase();
         return next;
@@ -751,6 +831,11 @@
     }catch(error){setError(friendlyError(error))}
   }
   async function leaveRoom(){stopWatch();await stopPresence(true);if(role==='caller'){await stopCallerLiveness({markDisconnected:true});for(const session of [callerAuth,googleCallerAuth]){if(session){try{await fb.signOut(session)}catch{}}}}resetUi();restorePrefs()}
+  q('#saveBusSchoolRoster').addEventListener('click',saveSchoolBusRoster);
+  q('#clearBusSchoolRoster').addEventListener('click',clearSchoolBusRoster);
+  q('#busSchoolRosterInput').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();saveSchoolBusRoster()}});
+  q('#busNumberInput').addEventListener('input',renderDuplicateWarnings);
+  q('#busAddOnNumberInput').addEventListener('input',renderDuplicateWarnings);
   q('#changeBusRoomCode').addEventListener('click',changeRoomCode);
   q('#leaveBusCaller').addEventListener('click',leaveRoom);
   q('#busCallerRoomChoice').addEventListener('click',()=>{const saved=getSavedCallerCode();if(!saved)return;callerCodeEditing=!callerCodeEditing;if(callerCodeEditing){q('#busCallerCodeInput').value='';setTimeout(()=>q('#busCallerCodeInput').focus(),0)}else q('#busCallerCodeInput').value=saved;updateCallerResumeUi()});

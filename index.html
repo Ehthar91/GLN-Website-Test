@@ -690,6 +690,11 @@ Fish = ညၣ်</textarea>
             <p id="busCodeReservation" role="status"></p>
             <p id="busCallerAccount" role="status">Caller PIN access</p>
             <button class="button ghost" id="connectBusGoogle" type="button">Connect Google account — replace PIN access</button>
+            <section class="bus-school-roster" id="busSchoolRosterPanel" aria-labelledby="busSchoolRosterTitle">
+              <div class="bus-school-roster-heading"><div><span>SCHOOL BUS LINEUP</span><strong id="busSchoolRosterTitle">Track buses still waiting to be called</strong><small>Enter the complete school bus list once. Use spaces between bus numbers.</small></div><div class="bus-roster-count"><strong id="busRosterRemainingCount">Bus list not set</strong><span id="busRosterProgressText">Add your bus list to track dismissal.</span></div></div>
+              <div class="bus-school-roster-entry"><input id="busSchoolRosterInput" maxlength="1200" autocomplete="off" spellcheck="false" placeholder="12 24 31 45 87" aria-label="All school bus numbers separated by spaces" /><button class="button primary" id="saveBusSchoolRoster" type="button">Save bus list</button><button class="button ghost" id="clearBusSchoolRoster" type="button" hidden>Clear list</button></div>
+              <div class="bus-roster-remaining"><span>NOT CALLED YET</span><div class="bus-roster-chip-list" id="busRosterRemainingList"><span class="bus-roster-empty">No school bus lineup saved yet.</span></div></div>
+            </section>
             <fieldset class="bus-call-stage-group">
               <legend>Call type</legend>
               <div class="bus-call-stage-options" role="group" aria-label="Bus call type">
@@ -701,6 +706,7 @@ Fish = ညၣ်</textarea>
             <label for="busNumberInput">Main bus number(s)</label>
             <div class="bus-call-entry-row"><input id="busNumberInput" maxlength="120" inputmode="text" autocomplete="off" placeholder="125 87 54" aria-label="Main bus numbers separated by spaces" /><button class="bus-call-send" id="sendBusCall" type="button">Call Bus</button></div>
             <small class="bus-main-number-help">Enter one bus or several buses separated by spaces, for example: <strong>125 87 54</strong>. Each bus appears as its own full-size active tile.</small>
+            <p class="bus-duplicate-warning" id="busMainDuplicateWarning" hidden></p>
             <label class="bus-note-field">Optional note <input id="busCallNoteInput" maxlength="80" autocomplete="off" placeholder="Front doors, Door 3, loading now…" /></label>
             <div class="bus-addon-launch"><button class="button ghost bus-addon-toggle" id="toggleBusAddOn" type="button" aria-expanded="false" aria-controls="busAddOnPanel">＋ Add-On Buses</button><span>Use this when an extra bus shows up after the regular lineup.</span></div>
             <section class="bus-addon-panel" id="busAddOnPanel" hidden aria-label="Add-On Bus caller">
@@ -718,6 +724,7 @@ Fish = ညၣ်</textarea>
               </fieldset>
               <label for="busAddOnNumberInput">Add-on bus number(s)</label>
               <div class="bus-call-entry-row"><input id="busAddOnNumberInput" maxlength="120" inputmode="text" autocomplete="off" placeholder="125 87 54" aria-label="Add-on bus numbers separated by spaces" /><button class="bus-call-send bus-addon-send" id="sendBusAddOn" type="button">Send Add-On • First Call</button></div><small class="bus-addon-number-help">Enter several buses with spaces, for example: <strong>125 87 54</strong>. Every bus stays active as its own large classroom tile.</small>
+              <p class="bus-duplicate-warning" id="busAddOnDuplicateWarning" hidden></p>
               <label class="bus-note-field">Optional note <input id="busAddOnNoteInput" maxlength="80" autocomplete="off" placeholder="Just arrived, front doors, loading now…" /></label>
               <p class="bus-addon-layer-note">Add-on buses stay separate from the regular bus call, so the regular bus remains on classroom screens.</p>
               <div class="bus-caller-addon-summary" id="busCallerAddOnSummary" hidden><div><span>ACTIVE ADD-ON BUSES</span><strong id="busCallerAddOnSummaryText">—</strong></div><button class="button primary" id="newBusAddOn" type="button">＋ Add another add-on bus</button></div>
