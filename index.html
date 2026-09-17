@@ -708,16 +708,16 @@ Fish = ညၣ်</textarea>
               <fieldset class="bus-call-stage-group bus-addon-stage-group">
                 <legend>Add-on call option</legend>
                 <div class="bus-call-stage-options bus-addon-preset-options" role="group" aria-label="Add-on bus call option">
-                  <button type="button" class="bus-stage-option first" data-bus-addon-preset="first" aria-pressed="false">First Call</button>
+                  <button type="button" class="bus-stage-option first active" data-bus-addon-preset="first" aria-pressed="true">First Call</button>
                   <button type="button" class="bus-stage-option second" data-bus-addon-preset="second" aria-pressed="false">Second Call</button>
                   <button type="button" class="bus-stage-option last" data-bus-addon-preset="last" aria-pressed="false">Last Call</button>
-                  <button type="button" class="bus-stage-option combo active" data-bus-addon-preset="first,second" aria-pressed="true">First + Second</button>
+                  <button type="button" class="bus-stage-option combo" data-bus-addon-preset="first,second" aria-pressed="false">First + Second</button>
                   <button type="button" class="bus-stage-option combo" data-bus-addon-preset="second,last" aria-pressed="false">Second + Last</button>
                   <button type="button" class="bus-stage-option combo" data-bus-addon-preset="first,second,last" aria-pressed="false">First + Second + Last</button>
                 </div>
               </fieldset>
               <label for="busAddOnNumberInput">Add-on bus number(s)</label>
-              <div class="bus-call-entry-row"><input id="busAddOnNumberInput" maxlength="120" inputmode="text" autocomplete="off" placeholder="125 87 54" aria-label="Add-on bus numbers separated by spaces" /><button class="bus-call-send bus-addon-send" id="sendBusAddOn" type="button">Send Add-On • First Call + Second Call</button></div><small class="bus-addon-number-help">Enter several buses with spaces, for example: <strong>125 87 54</strong>. Every bus stays active as its own large classroom tile.</small>
+              <div class="bus-call-entry-row"><input id="busAddOnNumberInput" maxlength="120" inputmode="text" autocomplete="off" placeholder="125 87 54" aria-label="Add-on bus numbers separated by spaces" /><button class="bus-call-send bus-addon-send" id="sendBusAddOn" type="button">Send Add-On • First Call</button></div><small class="bus-addon-number-help">Enter several buses with spaces, for example: <strong>125 87 54</strong>. Every bus stays active as its own large classroom tile.</small>
               <label class="bus-note-field">Optional note <input id="busAddOnNoteInput" maxlength="80" autocomplete="off" placeholder="Just arrived, front doors, loading now…" /></label>
               <p class="bus-addon-layer-note">Add-on buses stay separate from the regular bus call, so the regular bus remains on classroom screens.</p>
               <div class="bus-caller-addon-summary" id="busCallerAddOnSummary" hidden><div><span>ACTIVE ADD-ON BUSES</span><strong id="busCallerAddOnSummaryText">—</strong></div><button class="button primary" id="newBusAddOn" type="button">＋ Add another add-on bus</button></div>
