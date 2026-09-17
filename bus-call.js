@@ -136,7 +136,26 @@
   function clearSessionExpiryTimer(){if(sessionExpiryTimer){clearTimeout(sessionExpiryTimer);sessionExpiryTimer=null}}
   function clearCallerHeartbeat(){if(callerHeartbeatTimer){clearInterval(callerHeartbeatTimer);callerHeartbeatTimer=null}}
   function stopWatch(){if(unsubscribe){unsubscribe();unsubscribe=null}clearSessionExpiryTimer()}
-  async function stopPresence(remove=true){if(presenceDisconnect){try{await presenceDisconnect.cancel()}catch{}presenceDisconnect=null}if(remove&&role==='teacher'&&code&&busUser&&fb){try{await fb.remove(listenerRef(code,busUser.uid))}catch{}}}
+  async function stopPresence(remove=true){
+    teacherPresenceAttached=false;
+    if(presenceDisconnect){try{await presenceDisconnect.cancel()}catch{}presenceDisconnect=null}
+    if(remove&&role==='teacher'&&code&&busUser&&fb){try{await fb.remove(listenerRef(code,busUser.uid))}catch{}}
+  }
+  async function ensureTeacherPresence(){
+    if(role!=='teacher'||!code||!busUser||!fb||teacherPresenceAttached)return;
+    teacherPresenceAttached=true;
+    const ref=listenerRef(code,busUser.uid);
+    try{
+      await fb.set(ref,{id:busUser.uid,name:teacherDisplayName||'Classroom',connected:true,joinedAt:Date.now(),lastSeen:Date.now()});
+      if(presenceDisconnect){try{await presenceDisconnect.cancel()}catch{}}
+      presenceDisconnect=fb.onDisconnect(ref);
+      await presenceDisconnect.remove();
+    }catch(error){
+      teacherPresenceAttached=false;
+      if(presenceDisconnect){try{await presenceDisconnect.cancel()}catch{}presenceDisconnect=null}
+      throw error;
+    }
+  }
   async function pruneExpiredHistory(){
     if(historyPruneBusy||role!=='caller'||!code||!room?.history)return;
     const cutoff=Date.now()-HISTORY_RETENTION_MS,updates={};
