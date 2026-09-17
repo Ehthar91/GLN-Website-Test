@@ -673,7 +673,7 @@ Fish = ညၣ်</textarea>
             <label id="busCallerCodeField">Room code <input id="busCallerCodeInput" maxlength="8" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Example: GLN25" /></label>
             <button class="button primary" id="startBusGoogle" type="button">Continue with Google — no PIN</button>
             <p>Or use a caller PIN</p>
-            <p>Your last room code stays remembered on this browser and remains reserved for its caller for 30 days after caller activity.</p>
+            <p>Your last room code stays remembered on this browser and remains reserved for its caller for 30 days after caller activity. If the caller browser closes, the live dismissal session expires after 1 hour.</p>
             <label>Caller PIN <input id="busCallerPinInput" type="password" inputmode="numeric" minlength="8" maxlength="12" pattern="[0-9]{8,12}" autocomplete="off" aria-describedby="busCallerPinHelp" placeholder="8–12 digits" /></label>
             <p id="busCallerPinHelp">Choose a PIN for a new room, or enter the original PIN to reopen it. Keep it private; classroom teachers only need the room code.</p>
             <button class="button primary" id="startBusCaller" type="button">Start / Reopen Caller Room</button>
@@ -724,7 +724,7 @@ Fish = ညၣ်</textarea>
             <div class="bus-caller-actions"><button class="button ghost" id="clearBusCall" type="button">Clear current call</button><button class="button ghost" id="leaveBusCaller" type="button">Leave caller mode</button><button class="button ghost" id="closeBusRoom" type="button">End session — keep code reserved</button></div>
             <p class="bus-call-status" id="busCallerStatus">Ready to call a bus.</p>
           </div>
-          <section class="bus-history-card"><div class="bus-history-heading"><div><span>RECENT CALLS</span><strong>Today in this room</strong></div><button id="clearBusHistory" type="button">Clear history</button></div><div class="bus-history-list" id="busCallHistory"><p>No buses called yet.</p></div></section>
+          <section class="bus-history-card"><div class="bus-history-heading"><div><span>RECENT CALLS</span><strong>Automatically clears after 1 hour</strong></div><button id="clearBusHistory" type="button">Clear history</button></div><div class="bus-history-list" id="busCallHistory"><p>No buses called yet.</p></div></section>
         </section>
 
         </div>

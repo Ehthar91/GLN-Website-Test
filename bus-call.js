@@ -7,6 +7,7 @@
   const popup=q('#busCallPopup'),popupNumber=q('#busPopupNumber'),popupNote=q('#busPopupNote'),popupTime=q('#busPopupTime'),popupStage=q('#busPopupStage'),popupRegularContext=q('#busPopupRegularContext');
   let busDb=null,busUser=null,callerAuth=null,callerDatabase=null,googleCallerAuth=null,googleCallerDatabase=null;
   let role='',code='',room=null,unsubscribe=null,presenceDisconnect=null,lastCallId='',seenAddOnIds=new Set(),audioContext=null,selectedStage='first',callerCodeEditing=false;
+  let callerDisconnect=null,callerHeartbeatTimer=null,sessionExpiryTimer=null,historyPruneBusy=false;
   const teacherSetup=q('#busTeacherSetup');
   const roleTabs=Array.from(panel.querySelectorAll('[data-bus-role]'));
   let fullscreenActive=false,fullscreenHome=null,popupHome=null,fullscreenFocus=null;
@@ -65,7 +66,22 @@
   });
   const ROOM_MS=18*60*60*1000;
   const RESERVATION_MS=30*24*60*60*1000;
+  const SESSION_IDLE_MS=60*60*1000;
+  const HISTORY_RETENTION_MS=60*60*1000;
+  const CALLER_HEARTBEAT_MS=60*1000;
   const lastCallerActivity=value=>Number(value?.callerLastActiveAt||value?.lastActivityAt||value?.createdAt)||0;
+  const sessionDeadline=value=>{
+    const disconnectedAt=Number(value?.callerDisconnectedAt)||0;
+    if(disconnectedAt)return disconnectedAt+SESSION_IDLE_MS;
+    const explicit=Number(value?.sessionExpiresAt)||0;
+    if(explicit)return explicit;
+    const heartbeatAt=Number(value?.callerHeartbeatAt)||0;
+    if(heartbeatAt)return heartbeatAt+SESSION_IDLE_MS;
+    // Older Bus Call rooms created before the liveness fields existed use their last caller activity as a safe migration fallback.
+    const legacyActivity=lastCallerActivity(value);
+    return legacyActivity?legacyActivity+SESSION_IDLE_MS:0;
+  };
+  const sessionExpired=value=>{const deadline=sessionDeadline(value);return !!deadline&&deadline<=Date.now()};
   const reservationExpired=value=>!!lastCallerActivity(value)&&lastCallerActivity(value)+RESERVATION_MS<=Date.now();
   const reservedMessage='This code is reserved for its caller until 30 days after their last activity. Use the original Google account or PIN, or choose a different code.';
   const normalizeCode=value=>String(value||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8);
@@ -116,12 +132,61 @@
     if(!callerCodeEditing){q('#busCallerCodeInput').value=saved;start.textContent=`Reopen ${saved} with PIN`;pinHelp.textContent=`Enter your caller PIN to reopen ${saved}. The room code is already remembered on this device.`}
     else{start.textContent='Start / Reopen Caller Room';pinHelp.textContent=`Enter a different room code below, or choose “Use ${saved} instead” to reopen your saved room.`}
   }
-  function stopWatch(){if(unsubscribe){unsubscribe();unsubscribe=null}}
+  function clearSessionExpiryTimer(){if(sessionExpiryTimer){clearTimeout(sessionExpiryTimer);sessionExpiryTimer=null}}
+  function clearCallerHeartbeat(){if(callerHeartbeatTimer){clearInterval(callerHeartbeatTimer);callerHeartbeatTimer=null}}
+  function stopWatch(){if(unsubscribe){unsubscribe();unsubscribe=null}clearSessionExpiryTimer()}
   async function stopPresence(remove=true){if(presenceDisconnect){try{await presenceDisconnect.cancel()}catch{}presenceDisconnect=null}if(remove&&role==='teacher'&&code&&busUser&&fb){try{await fb.remove(listenerRef(code,busUser.uid))}catch{}}}
-  function resetUi(){if(fullscreenActive)exitBusFullscreen();setup.hidden=false;callerConsole.hidden=true;teacherConsole.hidden=true;popup.hidden=true;const activeAddOns=q('#busActiveAddOns');if(activeAddOns)activeAddOns.hidden=true;const addOnPanel=q('#busAddOnPanel');if(addOnPanel)addOnPanel.hidden=true;const addOnToggle=q('#toggleBusAddOn');if(addOnToggle){addOnToggle.setAttribute('aria-expanded','false');addOnToggle.textContent='＋ Add-On Buses'}role='';code='';room=null;lastCallId='';seenAddOnIds=new Set();setConnection('Not connected');setError('');updateRoleTabs()}
+  async function pruneExpiredHistory(){
+    if(historyPruneBusy||role!=='caller'||!code||!room?.history)return;
+    const cutoff=Date.now()-HISTORY_RETENTION_MS,updates={};
+    Object.entries(room.history).forEach(([key,item])=>{const calledAt=Number(item?.calledAt)||0;if(calledAt&&calledAt<=cutoff)updates[`history/${key}`]=null});
+    if(!Object.keys(updates).length)return;
+    historyPruneBusy=true;try{await fb.update(roomRef(code),updates)}catch{}finally{historyPruneBusy=false}
+  }
+  async function writeCallerHeartbeat(){
+    if(role!=='caller'||!code||!busUser||!fb)return;
+    await fb.update(roomRef(code),{callerHeartbeatAt:fb.serverTimestamp(),callerDisconnectedAt:null,sessionExpiresAt:Date.now()+SESSION_IDLE_MS,callerLastActiveAt:fb.serverTimestamp()});
+    await pruneExpiredHistory();
+  }
+  async function startCallerLiveness(){
+    clearCallerHeartbeat();
+    if(callerDisconnect){try{await callerDisconnect.cancel()}catch{}callerDisconnect=null}
+    if(role!=='caller'||!code||!busUser||!fb)return;
+    const disconnectRef=fb.ref(busDb,`quizRooms/${roomKey(code)}/callerDisconnectedAt`);
+    callerDisconnect=fb.onDisconnect(disconnectRef);
+    try{await callerDisconnect.set(fb.serverTimestamp())}catch{}
+    await writeCallerHeartbeat();
+    callerHeartbeatTimer=setInterval(()=>{writeCallerHeartbeat().catch(()=>{})},CALLER_HEARTBEAT_MS);
+  }
+  async function stopCallerLiveness({markDisconnected=false}={}){
+    clearCallerHeartbeat();clearSessionExpiryTimer();
+    if(callerDisconnect){try{await callerDisconnect.cancel()}catch{}callerDisconnect=null}
+    if(markDisconnected&&role==='caller'&&code&&busUser&&fb){try{await fb.update(roomRef(code),{callerDisconnectedAt:fb.serverTimestamp(),sessionExpiresAt:Date.now()+SESSION_IDLE_MS,callerLastActiveAt:fb.serverTimestamp()})}catch{}}
+  }
+  function expireSessionUi(){
+    clearSessionExpiryTimer();popup.hidden=true;q('#busBoardNumber').textContent='—';q('#busBoardLabel').textContent='SESSION ENDED';setConnection('Session ended');
+    if(role==='teacher'){
+      q('#busWaitingTitle').textContent='Bus Call session ended';
+      q('#busWaitingDetail').textContent='The caller has been offline for an hour. Ask the caller to reopen the room for today’s dismissal.';
+      stopPresence(true);stopWatch();
+    }else if(role==='caller'){
+      clearCallerHeartbeat();
+      setError('This caller session expired after one hour without an active caller connection. Reopen the room to start a fresh session.');
+      stopWatch();
+    }
+  }
+  function scheduleSessionExpiry(value){
+    clearSessionExpiryTimer();const deadline=sessionDeadline(value);if(!deadline)return false;
+    const remaining=deadline-Date.now();
+    if(remaining<=0){expireSessionUi();return true}
+    sessionExpiryTimer=setTimeout(()=>{if(room&&sessionExpired(room))expireSessionUi()},Math.min(remaining+100,2147483000));
+    return false;
+  }
+  function resetUi(){if(fullscreenActive)exitBusFullscreen();clearCallerHeartbeat();clearSessionExpiryTimer();if(callerDisconnect){try{callerDisconnect.cancel().catch(()=>{})}catch{}callerDisconnect=null}setup.hidden=false;callerConsole.hidden=true;teacherConsole.hidden=true;popup.hidden=true;const activeAddOns=q('#busActiveAddOns');if(activeAddOns)activeAddOns.hidden=true;const addOnPanel=q('#busAddOnPanel');if(addOnPanel)addOnPanel.hidden=true;const addOnToggle=q('#toggleBusAddOn');if(addOnToggle){addOnToggle.setAttribute('aria-expanded','false');addOnToggle.textContent='＋ Add-On Buses'}role='';code='';room=null;lastCallId='';seenAddOnIds=new Set();setConnection('Not connected');setError('');updateRoleTabs()}
   function renderHistory(history={}){
     const list=q('#busCallHistory');
-    const items=Object.values(history||{}).filter(Boolean).sort((a,b)=>(b.calledAt||0)-(a.calledAt||0)).slice(0,20);
+    const cutoff=Date.now()-HISTORY_RETENTION_MS;
+    const items=Object.values(history||{}).filter(item=>item&&(!Number(item.calledAt)||Number(item.calledAt)>cutoff)).sort((a,b)=>(b.calledAt||0)-(a.calledAt||0)).slice(0,20);
     list.innerHTML='';
     if(!items.length){const p=document.createElement('p');p.textContent='No buses called yet.';list.append(p);return}
     items.forEach(item=>{
@@ -215,7 +280,7 @@
       q('#busWaitingDetail').textContent='A large alert will appear on this screen when the caller sends a bus number.';
     }
   }
-  function watchRoom(){stopWatch();unsubscribe=fb.onValue(roomRef(code),snap=>{if(!snap.exists()){setError('This Bus Call room was closed or no longer exists.');setConnection('Room closed','problem');q('#busBoardNumber').textContent='—';q('#busBoardLabel').textContent='ROOM CLOSED';stopPresence(false);stopWatch();popup.hidden=true;return}room=snap.val()||{};if(role==='caller'&&room.hostUid!==busUser.uid){stopWatch();resetUi();setError('This code now belongs to another caller. Choose a different code.');return}if(room.status==='closed'){popup.hidden=true;q('#busBoardNumber').textContent='—';q('#busBoardLabel').textContent='ROOM CLOSED';setConnection('Room closed');if(role==='teacher'){q('#busWaitingTitle').textContent='Room closed';q('#busWaitingDetail').textContent='The caller ended this session. Leave and join again when it reopens.';stopPresence(false);stopWatch()}return}if(room.expiresAt&&room.expiresAt<Date.now()){setError('This Bus Call room has expired. Start or join a new room.');setConnection('Room expired','problem');popup.hidden=true;q('#busBoardNumber').textContent='—';q('#busBoardLabel').textContent='ROOM EXPIRED';return}setConnection(role==='caller'?'Caller online':'Listening','online');if(role==='caller')renderCaller(room);else renderTeacher(room)},err=>{setConnection('Connection problem','problem');setError(err?.message||'Could not stay connected to the Bus Call room.')})}
+  function watchRoom(){stopWatch();unsubscribe=fb.onValue(roomRef(code),snap=>{if(!snap.exists()){setError('This Bus Call room was closed or no longer exists.');setConnection('Room closed','problem');q('#busBoardNumber').textContent='—';q('#busBoardLabel').textContent='ROOM CLOSED';stopPresence(false);stopWatch();popup.hidden=true;return}room=snap.val()||{};if(role==='caller'&&room.hostUid!==busUser.uid){stopWatch();resetUi();setError('This code now belongs to another caller. Choose a different code.');return}if(room.status==='closed'){popup.hidden=true;q('#busBoardNumber').textContent='—';q('#busBoardLabel').textContent='ROOM CLOSED';setConnection('Room closed');if(role==='teacher'){q('#busWaitingTitle').textContent='Room closed';q('#busWaitingDetail').textContent='The caller ended this session. Leave and join again when it reopens.';stopPresence(false);stopWatch()}return}if(room.expiresAt&&room.expiresAt<Date.now()){setError('This Bus Call room has expired. Start or join a new room.');setConnection('Room expired','problem');popup.hidden=true;q('#busBoardNumber').textContent='—';q('#busBoardLabel').textContent='ROOM EXPIRED';return}if(sessionExpired(room)){expireSessionUi();return}scheduleSessionExpiry(room);setConnection(role==='caller'?'Caller online':'Listening','online');if(role==='caller')renderCaller(room);else renderTeacher(room)},err=>{setConnection('Connection problem','problem');setError(err?.message||'Could not stay connected to the Bus Call room.')})}
   async function ensureFirebase(){setConnection('Connecting…');await initRaceFirebase();busDb=db;busUser=currentUser;setConnection('Connected','online')}
   async function callerIdentity(roomCode,pin,canCreate,accountKey=roomCode.toLowerCase()){
     if(!callerAuth){
@@ -263,10 +328,10 @@
     try{
       const user=await googleCallerIdentity();
       // Only the authenticated current room owner can transfer this room.
-      stopWatch();
-      await fb.update(roomRef(code),{hostUid:user.uid,pinAccountKey:null,callerLastActiveAt:fb.serverTimestamp()});
+      await stopCallerLiveness();stopWatch();
+      await fb.update(roomRef(code),{hostUid:user.uid,pinAccountKey:null,callerLastActiveAt:fb.serverTimestamp(),callerHeartbeatAt:fb.serverTimestamp(),callerDisconnectedAt:null,sessionExpiresAt:Date.now()+SESSION_IDLE_MS});
       stopWatch();busDb=googleCallerDatabase;busUser=user;
-      callerAccountUi();watchRoom();
+      callerAccountUi();await startCallerLiveness();watchRoom();
     }catch(error){if(role==='caller'&&code)watchRoom();setError(callerAuthError(error,'google'))}
     finally{button.disabled=false}
   }
@@ -295,9 +360,9 @@
       // Re-check the latest reservation inside the transaction, including after a competing renewal.
       const result=await fb.runTransaction(roomRef(selected),value=>{
         if(value&&value.hostUid!==user.uid&&!reservationExpired(value))return;
-        const active=value&&value.hostUid===user.uid&&value.status!=='closed'&&(!value.expiresAt||value.expiresAt>Date.now());
+        const active=value&&value.hostUid===user.uid&&value.status!=='closed'&&(!value.expiresAt||value.expiresAt>Date.now())&&!sessionExpired(value);
         const next=active?{...value}:{hostUid:user.uid,status:'open',createdAt:fb.serverTimestamp(),expiresAt:Date.now()+ROOM_MS};
-        next.callerLastActiveAt=fb.serverTimestamp();
+        next.callerLastActiveAt=fb.serverTimestamp();next.callerHeartbeatAt=fb.serverTimestamp();next.callerDisconnectedAt=null;next.sessionExpiresAt=Date.now()+SESSION_IDLE_MS;
         if(accountKey)next.pinAccountKey=accountKey;else delete next.pinAccountKey;
         return next;
       },{applyLocally:false});
@@ -306,13 +371,13 @@
       setup.hidden=true;callerConsole.hidden=false;teacherConsole.hidden=true;
       q('#busCallerRoomCode').textContent=code;q('#busCallerPinInput').value='';
       saveCallerCode(code);callerCodeEditing=false;updateCallerResumeUi();
-      callerAccountUi();watchRoom();q('#busNumberInput').focus();
+      callerAccountUi();await startCallerLiveness();watchRoom();q('#busNumberInput').focus();
     }catch(error){
       setConnection('Could not connect','problem');
       setError(callerAuthError(error,method));
     }finally{buttons.forEach(button=>button.disabled=false)}
   }
-  async function joinTeacherRoom(){setError('');const requested=normalizeCode(q('#busTeacherCodeInput').value),name=cleanText(q('#busTeacherNameInput').value,32)||'Classroom';try{if(requested.length<4)throw new Error('Enter the shared Bus Call room code.');await ensureFirebase();const snap=await fb.get(roomRef(requested));if(!snap.exists())throw new Error('Bus Call room not found. Check the room code.');const value=snap.val();if(value.status==='closed'||(value.expiresAt&&value.expiresAt<Date.now()))throw new Error('This Bus Call room is no longer active.');role='teacher';selectRole('teacher');updateRoleTabs();code=requested;lastCallId='';seenAddOnIds=new Set();setup.hidden=true;callerConsole.hidden=true;teacherConsole.hidden=false;q('#busTeacherRoomCode').textContent=code;q('#busTeacherCodeInput').value=code;saveTeacherPrefs();const ref=listenerRef(code,busUser.uid);await fb.set(ref,{id:busUser.uid,name,connected:true,joinedAt:Date.now(),lastSeen:Date.now()});presenceDisconnect=fb.onDisconnect(ref);await presenceDisconnect.remove();watchRoom()}catch(error){setConnection('Could not join','problem');setError(friendlyError(error))}}
+  async function joinTeacherRoom(){setError('');const requested=normalizeCode(q('#busTeacherCodeInput').value),name=cleanText(q('#busTeacherNameInput').value,32)||'Classroom';try{if(requested.length<4)throw new Error('Enter the shared Bus Call room code.');await ensureFirebase();const snap=await fb.get(roomRef(requested));if(!snap.exists())throw new Error('Bus Call room not found. Check the room code.');const value=snap.val();if(value.status==='closed'||(value.expiresAt&&value.expiresAt<Date.now()))throw new Error('This Bus Call room is no longer active.');if(sessionExpired(value))throw new Error('This Bus Call session ended after the caller was offline for one hour. Ask the caller to reopen the room for today’s dismissal.');role='teacher';selectRole('teacher');updateRoleTabs();code=requested;lastCallId='';seenAddOnIds=new Set();setup.hidden=true;callerConsole.hidden=true;teacherConsole.hidden=false;q('#busTeacherRoomCode').textContent=code;q('#busTeacherCodeInput').value=code;saveTeacherPrefs();const ref=listenerRef(code,busUser.uid);await fb.set(ref,{id:busUser.uid,name,connected:true,joinedAt:Date.now(),lastSeen:Date.now()});presenceDisconnect=fb.onDisconnect(ref);await presenceDisconnect.remove();watchRoom()}catch(error){setConnection('Could not join','problem');setError(friendlyError(error))}}
   async function sendCall(){if(role!=='caller'||!code)return;const number=cleanText(q('#busNumberInput').value,18),note=cleanText(q('#busCallNoteInput').value,80),sentStage=selectedStage;if(!number){setError('Enter a bus number first.');q('#busNumberInput').focus();return}setError('');const button=q('#sendBusCall');button.disabled=true;try{const id=`${Date.now()}-${Math.random().toString(36).slice(2,7)}`,call={id,number,note,stage:sentStage,calledAt:fb.serverTimestamp()};const historyKey=fb.push(fb.ref(busDb,`quizRooms/${roomKey(code)}/history`)).key;await fb.update(roomRef(code),{currentCall:call,[`history/${historyKey}`]:call,lastActivityAt:fb.serverTimestamp(),callerLastActiveAt:fb.serverTimestamp()});q('#busCallNoteInput').value='';if(sentStage==='first')setCallStage('second');else if(sentStage==='second')setCallStage('last');q('#busNumberInput').focus();q('#busNumberInput').select()}catch(error){setError(friendlyError(error))}finally{button.disabled=false}}
   function getAddOnStages(){
     const button=panel.querySelector('[data-bus-addon-preset].active');
@@ -372,20 +437,21 @@
       const result=await fb.runTransaction(roomRef(selected),value=>{
         // Never overwrite another active reservation, including a different room owned by this caller.
         if(value&&!reservationExpired(value))return;
-        const next={hostUid:busUser.uid,status:'open',createdAt:fb.serverTimestamp(),expiresAt:Date.now()+ROOM_MS,callerLastActiveAt:fb.serverTimestamp()};
+        const next={hostUid:busUser.uid,status:'open',createdAt:fb.serverTimestamp(),expiresAt:Date.now()+ROOM_MS,callerLastActiveAt:fb.serverTimestamp(),callerHeartbeatAt:fb.serverTimestamp(),callerDisconnectedAt:null,sessionExpiresAt:Date.now()+SESSION_IDLE_MS};
         if(source.pinAccountKey)next.pinAccountKey=source.pinAccountKey;
         else if(!busUser.providerData?.some(provider=>provider.providerId==='google.com'))next.pinAccountKey=previous.toLowerCase();
         return next;
       },{applyLocally:false});
       if(!result.committed)throw new Error('That code is already reserved. Your current code has not changed.');
       claimed=true;
-      // Retain the old reservation and its history; never delete the old room record.
+      // Retain the old reservation; its live calls are ended when switching room codes.
+      await stopCallerLiveness();
       await fb.update(roomRef(previous),{status:'closed',currentCall:null,addOnCalls:null,players:null,closedAt:fb.serverTimestamp()});
       stopWatch();code=selected;
       q('#busCallerRoomCode').textContent=code;q('#busCallerCodeInput').value=code;
       q('#busNumberInput').value='';q('#busCallNoteInput').value='';q('#busAddOnNumberInput').value='';q('#busAddOnNoteInput').value='';setAddOnStages(['first','second']);setAddOnPanel(false);
       saveCallerCode(code);callerCodeEditing=false;updateCallerResumeUi();
-      watchRoom();q('#busNumberInput').focus();
+      await startCallerLiveness();watchRoom();q('#busNumberInput').focus();
     }catch(error){
       setError(claimed?`The new code ${selected} is reserved for you, but the old session could not be closed. You are still in ${previous}. Both reservations were kept. You can leave and reopen ${selected} with the same sign-in.`:friendlyError(error));
     }finally{controls.forEach(button=>button.disabled=false)}
@@ -393,11 +459,12 @@
   async function closeRoom(){
     if(role!=='caller'||!code||!confirm(`Close room ${code}? Calls will be cleared. Your code stays reserved for 30 days.`))return;
     try{
-      await fb.update(roomRef(code),{status:'closed',currentCall:null,addOnCalls:null,history:null,players:null,closedAt:fb.serverTimestamp(),callerLastActiveAt:fb.serverTimestamp()});
+      await stopCallerLiveness();
+      await fb.update(roomRef(code),{status:'closed',currentCall:null,addOnCalls:null,history:null,players:null,closedAt:fb.serverTimestamp(),callerDisconnectedAt:fb.serverTimestamp(),callerLastActiveAt:fb.serverTimestamp()});
       stopWatch();resetUi();
     }catch(error){setError(friendlyError(error))}
   }
-  async function leaveRoom(){stopWatch();await stopPresence(true);if(role==='caller'){try{await fb.update(roomRef(code),{callerLastActiveAt:fb.serverTimestamp()})}catch{}for(const session of [callerAuth,googleCallerAuth]){if(session){try{await fb.signOut(session)}catch{}}}}resetUi();restorePrefs()}
+  async function leaveRoom(){stopWatch();await stopPresence(true);if(role==='caller'){await stopCallerLiveness({markDisconnected:true});for(const session of [callerAuth,googleCallerAuth]){if(session){try{await fb.signOut(session)}catch{}}}}resetUi();restorePrefs()}
   q('#changeBusRoomCode').addEventListener('click',changeRoomCode);
   q('#leaveBusCaller').addEventListener('click',leaveRoom);
   q('#busCallerRoomChoice').addEventListener('click',()=>{const saved=getSavedCallerCode();if(!saved)return;callerCodeEditing=!callerCodeEditing;if(callerCodeEditing){q('#busCallerCodeInput').value='';setTimeout(()=>q('#busCallerCodeInput').focus(),0)}else q('#busCallerCodeInput').value=saved;updateCallerResumeUi()});
@@ -410,7 +477,7 @@
   panel.querySelectorAll('[data-bus-addon-preset]').forEach(button=>button.addEventListener('click',()=>selectAddOnPreset(button.dataset.busAddonPreset)));
   panel.querySelectorAll('[data-bus-call-stage]').forEach(button=>button.addEventListener('click',()=>setCallStage(button.dataset.busCallStage)));
   ['#busCallerCodeInput','#busTeacherCodeInput'].forEach(sel=>q(sel).addEventListener('input',e=>{const pos=e.target.selectionStart;e.target.value=normalizeCode(e.target.value);try{e.target.setSelectionRange(pos,pos)}catch{}}));
-  window.addEventListener('beforeunload',()=>{if(role==='teacher'&&code&&busUser&&fb){try{fb.update(listenerRef(code,busUser.uid),{connected:false,lastSeen:Date.now()})}catch{}}});
+  window.addEventListener('beforeunload',()=>{if(role==='teacher'&&code&&busUser&&fb){try{fb.update(listenerRef(code,busUser.uid),{connected:false,lastSeen:Date.now()})}catch{}}/* Caller disconnect is handled server-side by Firebase onDisconnect. */});
   window.openBusCall=()=>setCalculatorMode('bus-call');
   window.refreshBusCall=()=>{if(role&&code)watchRoom()};
   try{q('#busCallerCodeInput').value=getSavedCallerCode()}catch{}
