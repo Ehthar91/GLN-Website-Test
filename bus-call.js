@@ -4,7 +4,7 @@
   const panel=q('#busCallPanel');
   if(!panel)return;
   const connection=q('#busCallConnection'),setup=q('#busCallSetup'),callerConsole=q('#busCallerConsole'),teacherConsole=q('#busClassroomConsole'),errorEl=q('#busCallError');
-  const popup=q('#busCallPopup'),popupNumber=q('#busPopupNumber'),popupNote=q('#busPopupNote'),popupTime=q('#busPopupTime'),popupStage=q('#busPopupStage'),popupRegularContext=q('#busPopupRegularContext');
+  const popup=q('#busCallPopup'),popupGrid=q('#busPopupActiveGrid'),popupTime=q('#busPopupTime'),popupStage=q('#busPopupStage');
   let busDb=null,busUser=null,callerAuth=null,callerDatabase=null,googleCallerAuth=null,googleCallerDatabase=null;
   let role='',code='',room=null,unsubscribe=null,presenceDisconnect=null,lastCallId='',lastCombinedCallId='',seenAddOnIds=new Set(),audioContext=null,selectedStage='first',callerCodeEditing=false;
   let callerDisconnect=null,callerHeartbeatTimer=null,sessionExpiryTimer=null,historyPruneBusy=false;
@@ -190,13 +190,10 @@
     if(markDisconnected&&role==='caller'&&code&&busUser&&fb){try{await fb.update(roomRef(code),{callerDisconnectedAt:fb.serverTimestamp(),sessionExpiresAt:Date.now()+SESSION_IDLE_MS,callerLastActiveAt:fb.serverTimestamp()})}catch{}}
   }
   function renderTeacherWaiting(detail='The caller has not started the dismissal room yet. Keep this screen open and it will connect automatically when the caller comes online.'){
-    clearSessionExpiryTimer();popup.hidden=true;q('#busBoardNumber').textContent='—';q('#busBoardLabel').textContent='WAITING FOR CALLER';
-    const boardNote=q('#busBoardNote');if(boardNote){boardNote.textContent='';boardNote.hidden=true}
-    const regularCard=q('#busRegularCallCard');if(regularCard)regularCard.hidden=false;
-    const grid=q('#busActiveCallGrid');if(grid)grid.dataset.count='1';
+    clearSessionExpiryTimer();popup.hidden=true;renderActiveCallBoard({});
+    const label=q('#busBoardLabel');if(label)label.textContent='WAITING FOR CALLER';
     const waiting=q('.bus-classroom-waiting');if(waiting)waiting.classList.remove('has-active-calls');
     q('#busTeacherConnectionText').textContent='Waiting for caller';setConnection('Waiting for caller');
-    const activeAddOns=q('#busActiveAddOns');if(activeAddOns)activeAddOns.hidden=true;
     q('#busWaitingTitle').textContent='Waiting for the caller…';q('#busWaitingDetail').textContent=detail;
   }
   function expireSessionUi(){
@@ -205,7 +202,7 @@
       stopPresence(true).catch(()=>{});
       renderTeacherWaiting('The previous live session ended after the caller was offline for an hour. You can stay here — this screen will reconnect automatically when the caller starts today’s dismissal.');
     }else if(role==='caller'){
-      popup.hidden=true;q('#busBoardNumber').textContent='—';q('#busBoardLabel').textContent='SESSION ENDED';setConnection('Session ended');
+      popup.hidden=true;renderActiveCallBoard({});const endedLabel=q('#busBoardLabel');if(endedLabel)endedLabel.textContent='SESSION ENDED';setConnection('Session ended');
       clearCallerHeartbeat();
       setError('This caller session expired after one hour without an active caller connection. Reopen the room to start a fresh session.');
       stopWatch();
@@ -230,7 +227,7 @@
       const bus=document.createElement('b');
       const combinedNumbers=Array.isArray(item.numbers)?item.numbers.filter(Boolean):[];
       if(item.isCombined)bus.textContent=`ALL: ${combinedNumbers.join(' + ')||item.number||'—'}`;
-      else if(item.isAddOnBatch)bus.textContent=combinedNumbers.join(' + ')||item.number||'—';
+      else if(item.isAddOnBatch||item.isMainBatch)bus.textContent=combinedNumbers.join(' + ')||item.number||'—';
       else bus.textContent=item.number||'—';
       const detail=document.createElement('span');detail.className='bus-history-detail';
       if(item.isCombined){const together=document.createElement('strong');together.className='bus-history-addon bus-history-combined';together.textContent='ALL TOGETHER';detail.append(together)}
@@ -243,6 +240,82 @@
   }
   function activeAddOnCalls(value){
     return Object.values(value?.addOnCalls||{}).filter(Boolean).sort((a,b)=>(a.calledAt||0)-(b.calledAt||0));
+  }
+  function activeRegularCalls(value){
+    const call=value?.currentCall;
+    if(!call)return [];
+    const numbers=Array.isArray(call.numbers)&&call.numbers.length?call.numbers:[call.number];
+    return numbers.map((number,index)=>({...call,id:`${call.id||'main'}-main-${index}`,number:cleanText(number,18),isAddOn:false,isMain:true})).filter(item=>item.number);
+  }
+  function allActiveCalls(value){
+    const all=[...activeRegularCalls(value),...activeAddOnCalls(value)];
+    const seen=new Set();
+    return all.filter(item=>{const key=cleanText(item.number,18).toUpperCase();if(!key||seen.has(key))return false;seen.add(key);return true});
+  }
+  function fitCardNumbers(root){
+    if(!root)return;
+    requestAnimationFrame(()=>{
+      root.querySelectorAll('.bus-display-call-card>strong,.bus-popup-call-tile>strong').forEach(number=>{
+        const card=number.parentElement,rect=card.getBoundingClientRect(),text=String(number.textContent||'—');
+        if(!rect.width||!rect.height)return;
+        const chars=Math.max(2.4,text.length),byWidth=(rect.width-20)/(chars*.58),byHeight=(rect.height-34)*.56;
+        const size=Math.max(22,Math.min(byWidth,byHeight,360));
+        number.style.setProperty('font-size',`${size}px`,'important');
+      });
+    });
+  }
+  function makeDisplayCallCard(call,{popupTile=false}={}){
+    const card=document.createElement('div');card.className=popupTile?'bus-popup-call-tile':'bus-display-call-card';
+    card.classList.add(call?.isAddOn?'addon':'regular');
+    const label=document.createElement('span');label.textContent=`${callStagesLabel(call).toUpperCase()} • ${call?.isAddOn?'ADD-ON BUS':'MAIN BUS'}`;
+    const number=document.createElement('strong');number.textContent=cleanText(call?.number,18)||'—';number.style.setProperty('--bus-digits',Math.max(3,number.textContent.length));
+    const note=document.createElement('p');note.textContent=cleanText(call?.note,80);note.hidden=!note.textContent;
+    card.append(label,number,note);return card;
+  }
+  function bestGridShape(count,width,height){
+    let best={cols:1,rows:Math.max(1,count),score:0};
+    for(let cols=1;cols<=Math.max(1,count);cols++){
+      const rows=Math.ceil(count/cols),cellW=width/cols,cellH=height/rows;
+      const score=Math.min(cellW,cellH*1.65);
+      if(score>best.score)best={cols,rows,score};
+    }
+    return best;
+  }
+  function fitBoardGrid(count){
+    const grid=q('#busActiveCallGrid');if(!grid||count<1)return;
+    const width=Math.max(320,grid.clientWidth||window.innerWidth-48),height=Math.max(260,(fullscreenActive?window.innerHeight-230:Math.min(window.innerHeight*.68,720)));
+    const shape=bestGridShape(count,width,height);
+    grid.style.setProperty('--board-cols',shape.cols);grid.style.setProperty('--board-rows',shape.rows);
+  }
+  function renderActiveCallBoard(value){
+    const grid=q('#busActiveCallGrid');if(!grid)return;
+    const calls=allActiveCalls(value);grid.innerHTML='';
+    if(!calls.length){
+      grid.dataset.count='1';
+      const card=document.createElement('div');card.className='bus-board-current bus-display-call-card regular';card.id='busRegularCallCard';
+      const label=document.createElement('span');label.id='busBoardLabel';label.textContent='WAITING FOR THE NEXT BUS';
+      const number=document.createElement('strong');number.id='busBoardNumber';number.textContent='—';
+      const note=document.createElement('p');note.id='busBoardNote';note.className='bus-display-call-note';note.hidden=true;
+      card.append(label,number,note);grid.append(card);fitBoardGrid(1);fitCardNumbers(grid);return;
+    }
+    grid.dataset.count=String(Math.min(calls.length,36));
+    calls.forEach(call=>grid.append(makeDisplayCallCard(call)));fitBoardGrid(calls.length);fitCardNumbers(grid);
+  }
+  function fitPopupGrid(count){
+    if(!popupGrid||count<1)return;
+    const width=Math.max(320,window.innerWidth-24),height=Math.max(220,window.innerHeight-115),shape=bestGridShape(count,width,height);
+    popupGrid.style.setProperty('--popup-cols',shape.cols);popupGrid.style.setProperty('--popup-rows',shape.rows);
+    popupGrid.dataset.count=String(count);
+  }
+  function showActivePopup(value,{heading='🚌 ACTIVE BUS CALLS',timeLabel='Called just now',test=false}={}){
+    if(!popupGrid)return;
+    const calls=allActiveCalls(value);if(!calls.length)return;
+    const headingEl=q('#busPopupHeading');if(headingEl)headingEl.textContent=heading;
+    const newest=calls.reduce((latest,item)=>Number(item.calledAt||0)>Number(latest?.calledAt||0)?item:latest,calls[0]);
+    popupStage.textContent=`${calls.length} ACTIVE BUS${calls.length===1?'':'ES'}`;popupStage.className='bus-popup-stage active-board';
+    popupTime.textContent=test?'Test alert':timeLabel;
+    popupGrid.innerHTML='';calls.forEach(call=>popupGrid.append(makeDisplayCallCard(call,{popupTile:true})));
+    fitPopupGrid(calls.length);popup.hidden=false;fitCardNumbers(popupGrid);if(!test)beep();
   }
   function renderActiveAddOns(value){
     const wrap=q('#busActiveAddOns'),list=q('#busActiveAddOnList');
@@ -259,17 +332,17 @@
     });
   }
   function renderCallerBusTools(value){
-    const addOns=activeAddOnCalls(value),regular=value?.currentCall||null;
+    const addOns=activeAddOnCalls(value),regulars=activeRegularCalls(value);
     const addOnSummary=q('#busCallerAddOnSummary'),addOnSummaryText=q('#busCallerAddOnSummaryText');
     if(addOnSummary&&addOnSummaryText){
       addOnSummary.hidden=!addOns.length;
       addOnSummaryText.textContent=addOns.length?addOns.map(item=>`Bus ${cleanText(item.number,18)||'—'}`).join(' • '):'—';
     }
     const bulk=q('#busBulkCallPanel'),bulkSummary=q('#busBulkCallSummary');
-    const canBulk=!!regular&&addOns.length>0;
+    const canBulk=regulars.length>0&&addOns.length>0;
     if(bulk)bulk.hidden=!canBulk;
     if(bulkSummary&&canBulk){
-      const all=[regular,...addOns];
+      const all=allActiveCalls(value);
       bulkSummary.textContent=`${all.length} active buses: ${all.map(item=>cleanText(item.number,18)||'—').join(' • ')}`;
     }
   }
@@ -282,70 +355,31 @@
     const addOns=activeAddOnCalls(value),suffix=addOns.length?` • ${addOns.length} add-on bus${addOns.length===1?'':'es'} also active.`:'';
     if(value.combinedCall){
       const combined=value.combinedCall,numbers=Array.isArray(combined.numbers)?combined.numbers.filter(Boolean):[];
-      q('#busCallerStatus').textContent=`${callStagesLabel(combined)} sent together for ${numbers.length||((value.currentCall?1:0)+addOns.length)} active buses at ${formatTime(combined.calledAt)}.`
+      q('#busCallerStatus').textContent=`${callStagesLabel(combined)} sent together for ${numbers.length||allActiveCalls(value).length} active buses at ${formatTime(combined.calledAt)}.`
     }else if(value.currentCall){
       const current=value.currentCall;
-      q('#busCallerStatus').textContent=`${callStagesLabel(current)} for Bus ${current.number} was sent at ${formatTime(current.calledAt)}.${suffix}`
+      const regularNumbers=activeRegularCalls(value).map(item=>item.number);q('#busCallerStatus').textContent=`${callStagesLabel(current)} for ${regularNumbers.length>1?'Buses':'Bus'} ${regularNumbers.join(', ')} was sent at ${formatTime(current.calledAt)}.${suffix}`
     }else q('#busCallerStatus').textContent=addOns.length?`${addOns.length} add-on bus${addOns.length===1?' is':'es are'} active. Ready for a regular bus call.`:'Ready to call a bus.'
   }
   function beep(){if(!q('#busSoundEnabled').checked)return;try{audioContext=audioContext||new (window.AudioContext||window.webkitAudioContext)();if(audioContext.state==='suspended')audioContext.resume();const now=audioContext.currentTime;[0,.18].forEach((delay,index)=>{const osc=audioContext.createOscillator(),gain=audioContext.createGain();osc.type='sine';osc.frequency.value=index?880:660;gain.gain.setValueAtTime(.0001,now+delay);gain.gain.exponentialRampToValueAtTime(.18,now+delay+.015);gain.gain.exponentialRampToValueAtTime(.0001,now+delay+.16);osc.connect(gain).connect(audioContext.destination);osc.start(now+delay);osc.stop(now+delay+.18)})}catch{}}
-  function showPopup(call,{test=false,regularCall=null}={}){
-    if(!call)return;popup.classList.remove('combined');
-    const stages=callStagesFor(call),stageText=stageListLabel(stages),primary=stages[0]||'first';
-    const heading=q('#busPopupHeading');if(heading)heading.textContent=call.isAddOn?'🚌 ADD-ON BUS':'🚌 BUS CALL';
-    popupStage.textContent=stageText.toUpperCase();
-    popupStage.className=`bus-popup-stage ${call.isAddOn?'addon':callStageClass(primary)}`;
-    popupNumber.textContent=cleanText(call.number,18)||'123';popupNumber.style.setProperty('--bus-digits',Math.max(3,popupNumber.textContent.length));
-    const note=cleanText(call.note,80);popupNote.textContent=note;popupNote.hidden=!note;
-    if(popupRegularContext){
-      if(call.isAddOn&&regularCall){popupRegularContext.textContent=`Regular call stays active: ${callStagesLabel(regularCall)} • Bus ${cleanText(regularCall.number,18)}`;popupRegularContext.hidden=false}
-      else popupRegularContext.hidden=true;
-    }
-    popupTime.textContent=test?'Test alert':`${call.isAddOn?'Add-On • ':''}${stageText} • Called at ${formatTime(call.calledAt)}`;
-    popup.hidden=false;if(!test)beep()
+  function showPopup(call,{test=false,value=room}={}){
+    const data=value||{currentCall:call};
+    showActivePopup(data,{heading:call?.isAddOn?'🚌 ADD-ON BUS — ALL ACTIVE BUSES':'🚌 BUS CALL — ALL ACTIVE BUSES',timeLabel:test?'Test alert':`${callStagesLabel(call)} • Called at ${formatTime(call?.calledAt)}`,test});
   }
-  function showAddOnBatchPopup(calls,regularCall=null){
+  function showAddOnBatchPopup(calls,value=room){
     const items=Array.isArray(calls)?calls.filter(Boolean):[];if(!items.length)return;
-    popup.classList.add('combined');
-    const numbers=items.map(call=>cleanText(call.number,18)).filter(Boolean);
-    const stages=callStagesFor(items[0]),stageText=stageListLabel(stages),primary=stages[0]||'first';
-    const heading=q('#busPopupHeading');if(heading)heading.textContent='🚌 ADD-ON BUSES';
-    popupStage.textContent=stageText.toUpperCase();popupStage.className=`bus-popup-stage addon ${callStageClass(primary)}`;
-    popupNumber.textContent=numbers.join(' • ')||'—';popupNumber.style.setProperty('--bus-digits',Math.max(3,popupNumber.textContent.length));
-    const commonNote=cleanText(items[0]?.note,80);popupNote.textContent=commonNote||`${numbers.length} add-on buses added.`;popupNote.hidden=false;
-    if(popupRegularContext){
-      if(regularCall){popupRegularContext.textContent=`Regular call stays active: ${callStagesLabel(regularCall)} • Bus ${cleanText(regularCall.number,18)}`;popupRegularContext.hidden=false}
-      else popupRegularContext.hidden=true;
-    }
-    popupTime.textContent=`Add-On Buses • ${stageText} • Called at ${formatTime(items[0]?.calledAt)}`;
-    popup.hidden=false;beep();
+    showActivePopup(value||room,{heading:'🚌 ADD-ON BUSES — ALL ACTIVE BUSES',timeLabel:`${callStagesLabel(items[0])} • Called at ${formatTime(items[0]?.calledAt)}`});
   }
-  function showCombinedPopup(call){
-    if(!call)return;popup.classList.add('combined');
-    const numbers=Array.isArray(call.numbers)?call.numbers.map(value=>cleanText(value,18)).filter(Boolean):[];
-    const stage=callStagesFor(call)[0]||'second',stageText=callStageLabel(stage);
-    const heading=q('#busPopupHeading');if(heading)heading.textContent='🚌 ALL ACTIVE BUSES';
-    popupStage.textContent=stageText.toUpperCase();popupStage.className=`bus-popup-stage ${callStageClass(stage)}`;
-    popupNumber.textContent=numbers.join(' • ')||cleanText(call.number,80)||'—';
-    popupNumber.style.setProperty('--bus-digits',Math.max(3,popupNumber.textContent.length));
-    popupNote.textContent=numbers.length?`${numbers.length} buses are being called together.`:'All active buses are being called together.';popupNote.hidden=false;
-    if(popupRegularContext)popupRegularContext.hidden=true;
-    popupTime.textContent=`All active buses • ${stageText} • Called at ${formatTime(call.calledAt)}`;
-    popup.hidden=false;beep();
+  function showCombinedPopup(call,value=room){
+    if(!call)return;
+    showActivePopup(value||room,{heading:'🚌 ALL ACTIVE BUSES',timeLabel:`${callStagesLabel(call)} • Called at ${formatTime(call.calledAt)}`});
   }
   function renderTeacher(value){
-    const regular=value.currentCall||null,addOns=activeAddOnCalls(value);
-    const hasActive=!!regular||!!addOns.length;
-    const regularCard=q('#busRegularCallCard'),grid=q('#busActiveCallGrid'),waiting=q('.bus-classroom-waiting'),boardNote=q('#busBoardNote');
+    const regular=value.currentCall||null,regulars=activeRegularCalls(value),addOns=activeAddOnCalls(value),active=allActiveCalls(value);
+    const hasActive=active.length>0,waiting=q('.bus-classroom-waiting');
     if(waiting)waiting.classList.toggle('has-active-calls',hasActive);
-    if(regularCard)regularCard.hidden=!regular&&!!addOns.length;
-    const activeCount=Math.max(1,(regular?1:0)+addOns.length);if(grid)grid.dataset.count=String(Math.min(activeCount,12));
-    q('#busBoardNumber').textContent=regular?cleanText(regular.number,18):'—';
-    q('#busBoardLabel').textContent=regular?`${callStagesLabel(regular).toUpperCase()} • REGULAR BUS`:'WAITING FOR THE NEXT REGULAR BUS';
-    q('#busBoardNumber').style.setProperty('--bus-digits',Math.max(3,String(regular?.number||'').length));
-    if(boardNote){const note=regular?cleanText(regular.note,80):'';boardNote.textContent=note;boardNote.hidden=!note}
+    renderActiveCallBoard(value);
     q('#busTeacherConnectionText').textContent='Connected';
-    renderActiveAddOns(value);
 
     const unseenAddOns=addOns.filter(call=>!seenAddOnIds.has(String(call.id)));
     addOns.forEach(call=>seenAddOnIds.add(String(call.id)));
@@ -354,27 +388,26 @@
     const combined=value.combinedCall||null,combinedIsNew=combined&&String(combined.id)!==lastCombinedCallId;
     if(combinedIsNew)lastCombinedCallId=String(combined.id);
 
-    // A combined announcement wins over individual popups because it represents the main bus + every active add-on.
     if(combinedIsNew){
-      showCombinedPopup(combined);
+      showCombinedPopup(combined,value);
     }else if(unseenAddOns.length>1){
-      showAddOnBatchPopup(unseenAddOns,regular);
+      showAddOnBatchPopup(unseenAddOns,value);
     }else if(unseenAddOns.length===1){
-      showPopup(unseenAddOns[0],{regularCall:regular});
+      showPopup(unseenAddOns[0],{value});
     }else if(regularIsNew){
-      showPopup(regular);
+      showPopup(regular,{value});
     }
 
-    if(regular){
-      q('#busWaitingTitle').textContent=`${callStagesLabel(regular)}: Bus ${regular.number}`;
-      q('#busWaitingDetail').textContent=`Regular bus called at ${formatTime(regular.calledAt)}${regular.note?` • ${regular.note}`:''}${addOns.length?` • ${addOns.length} add-on bus${addOns.length===1?'':'es'} also active.`:''}`;
+    if(regulars.length){
+      q('#busWaitingTitle').textContent=`${callStagesLabel(regular)}: ${regulars.length>1?'Buses':'Bus'} ${regulars.map(item=>item.number).join(', ')}`;
+      q('#busWaitingDetail').textContent=`Main bus call sent at ${formatTime(regular.calledAt)}${regular.note?` • ${regular.note}`:''}${addOns.length?` • ${addOns.length} add-on bus${addOns.length===1?'':'es'} also active.`:''}`;
     }else if(addOns.length){
       q('#busWaitingTitle').textContent=`${addOns.length} add-on bus${addOns.length===1?'':'es'} active`;
-      q('#busWaitingDetail').textContent='The regular bus call is clear. Add-on buses remain listed below.';
+      q('#busWaitingDetail').textContent='The main bus call is clear. Add-on buses remain active.';
     }else{
       popup.hidden=true;
       q('#busWaitingTitle').textContent='Waiting for the next bus';
-      q('#busWaitingDetail').textContent='A large alert will appear on this screen when the caller sends a bus number.';
+      q('#busWaitingDetail').textContent='A full-screen alert will appear with every active bus when the caller sends a bus number.';
     }
   }
   function watchRoom(){
@@ -387,7 +420,7 @@
           renderTeacherWaiting('This room is not live yet. Keep this screen open and it will connect automatically as soon as the caller starts this room.');
           return;
         }
-        setError('This Bus Call room was closed or no longer exists.');setConnection('Room closed','problem');q('#busBoardNumber').textContent='—';q('#busBoardLabel').textContent='ROOM CLOSED';stopWatch();popup.hidden=true;return;
+        setError('This Bus Call room was closed or no longer exists.');setConnection('Room closed','problem');renderActiveCallBoard({});const closedLabel=q('#busBoardLabel');if(closedLabel)closedLabel.textContent='ROOM CLOSED';stopWatch();popup.hidden=true;return;
       }
       room=snap.val()||{};
       if(role==='caller'&&room.hostUid!==busUser.uid){stopWatch();resetUi();setError('This code now belongs to another caller. Choose a different code.');return}
@@ -397,8 +430,8 @@
         renderTeacherWaiting(room.status==='closed'?'The caller has not started today’s dismissal yet. Keep this screen open and it will reconnect automatically when the caller reopens the room.':'The previous live session is no longer active. Keep this screen open and it will reconnect automatically when the caller starts today’s dismissal.');
         return;
       }
-      if(room.status==='closed'){popup.hidden=true;q('#busBoardNumber').textContent='—';q('#busBoardLabel').textContent='ROOM CLOSED';setConnection('Room closed');return}
-      if(room.expiresAt&&room.expiresAt<Date.now()){setError('This Bus Call room has expired. Start or join a new room.');setConnection('Room expired','problem');popup.hidden=true;q('#busBoardNumber').textContent='—';q('#busBoardLabel').textContent='ROOM EXPIRED';return}
+      if(room.status==='closed'){popup.hidden=true;renderActiveCallBoard({});const closedLabel=q('#busBoardLabel');if(closedLabel)closedLabel.textContent='ROOM CLOSED';setConnection('Room closed');return}
+      if(room.expiresAt&&room.expiresAt<Date.now()){setError('This Bus Call room has expired. Start or join a new room.');setConnection('Room expired','problem');popup.hidden=true;renderActiveCallBoard({});const expiredLabel=q('#busBoardLabel');if(expiredLabel)expiredLabel.textContent='ROOM EXPIRED';return}
       if(sessionExpired(room)){expireSessionUi();return}
       scheduleSessionExpiry(room);setConnection(role==='caller'?'Caller online':'Listening','online');
       if(role==='caller')renderCaller(room);else{ensureTeacherPresence().catch(error=>setError(friendlyError(error)));renderTeacher(room)}
@@ -510,7 +543,21 @@
       renderTeacherWaiting();watchRoom();
     }catch(error){setConnection('Could not join','problem');setError(friendlyError(error))}
   }
-  async function sendCall(){if(role!=='caller'||!code)return;const number=cleanText(q('#busNumberInput').value,18),note=cleanText(q('#busCallNoteInput').value,80),sentStage=selectedStage;if(!number){setError('Enter a bus number first.');q('#busNumberInput').focus();return}setError('');const button=q('#sendBusCall');button.disabled=true;try{const id=`${Date.now()}-${Math.random().toString(36).slice(2,7)}`,call={id,number,note,stage:sentStage,calledAt:fb.serverTimestamp()};const historyKey=fb.push(fb.ref(busDb,`quizRooms/${roomKey(code)}/history`)).key;await fb.update(roomRef(code),{currentCall:call,combinedCall:null,[`history/${historyKey}`]:call,lastActivityAt:fb.serverTimestamp(),callerLastActiveAt:fb.serverTimestamp()});q('#busCallNoteInput').value='';if(sentStage==='first')setCallStage('second');else if(sentStage==='second')setCallStage('last');q('#busNumberInput').focus();q('#busNumberInput').select()}catch(error){setError(friendlyError(error))}finally{button.disabled=false}}
+  async function sendCall(){
+    if(role!=='caller'||!code)return;
+    const numbers=parseBusNumbers(q('#busNumberInput').value),note=cleanText(q('#busCallNoteInput').value,80),sentStage=selectedStage;
+    if(!numbers.length){setError('Enter one or more main bus numbers. Separate multiple buses with spaces.');q('#busNumberInput').focus();return}
+    if(numbers.length>12){setError('Enter up to 12 main buses at one time.');q('#busNumberInput').focus();return}
+    setError('');const button=q('#sendBusCall');button.disabled=true;
+    try{
+      const id=`${Date.now()}-${Math.random().toString(36).slice(2,7)}`,stamp=fb.serverTimestamp();
+      const call={id,number:numbers[0],numbers,note,stage:sentStage,stages:[sentStage],isMainBatch:numbers.length>1,calledAt:stamp};
+      const historyKey=fb.push(fb.ref(busDb,`quizRooms/${roomKey(code)}/history`)).key;
+      const history={...call,number:numbers.join(' + ')};
+      await fb.update(roomRef(code),{currentCall:call,combinedCall:null,[`history/${historyKey}`]:history,lastActivityAt:stamp,callerLastActiveAt:stamp});
+      q('#busCallNoteInput').value='';if(sentStage==='first')setCallStage('second');else if(sentStage==='second')setCallStage('last');q('#busNumberInput').focus();q('#busNumberInput').select();
+    }catch(error){setError(friendlyError(error))}finally{button.disabled=false}
+  }
   function getAddOnStages(){
     const button=panel.querySelector('[data-bus-addon-preset].active');
     return normalizeStageList(button?.dataset.busAddonPreset?.split(',')||[])
@@ -568,12 +615,12 @@
     stage=callStageClass(stage);
     if(!['second','last'].includes(stage))return;
     const regular=room?.currentCall||null,addOns=activeAddOnCalls(room);
-    if(!regular){setError('Call the main bus first before using an All Active Buses call.');return}
+    if(!activeRegularCalls(room).length){setError('Call the main bus first before using an All Active Buses call.');return}
     if(!addOns.length){setError('Add at least one add-on bus before using an All Active Buses call.');return}
     const buttons=[q('#busCallAllSecond'),q('#busCallAllLast')];buttons.forEach(button=>button.disabled=true);setError('');
     try{
       const stamp=fb.serverTimestamp(),id=`all-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
-      const numbers=[regular,...addOns].map(item=>cleanText(item.number,18)).filter(Boolean);
+      const numbers=allActiveCalls(room).map(item=>cleanText(item.number,18)).filter(Boolean);
       const combined={id,number:numbers.join(' + '),numbers,stage,stages:[stage],isCombined:true,calledAt:stamp};
       const updates={currentCall:{...regular,stage,stages:[stage],calledAt:stamp},combinedCall:combined,lastActivityAt:stamp,callerLastActiveAt:stamp};
       addOns.forEach(item=>{updates[`addOnCalls/${item.id}`]={...item,stage,stages:[stage],calledAt:stamp}});
@@ -588,7 +635,7 @@
     if(role!=='caller'||!code)return;
     const regular=room?.currentCall||null,addOns=activeAddOnCalls(room);
     if(!regular&&!addOns.length){q('#busCallerStatus').textContent='No active buses to clear.';return}
-    const count=(regular?1:0)+addOns.length;
+    const count=allActiveCalls(room).length;
     if(!confirm(`Clear all ${count} active bus${count===1?'':'es'} from classroom screens?`))return;
     try{
       await fb.update(roomRef(code),{currentCall:null,addOnCalls:null,combinedCall:null,lastActivityAt:fb.serverTimestamp(),callerLastActiveAt:fb.serverTimestamp()});
@@ -645,7 +692,7 @@
   q('#changeBusRoomCode').addEventListener('click',changeRoomCode);
   q('#leaveBusCaller').addEventListener('click',leaveRoom);
   q('#busCallerRoomChoice').addEventListener('click',()=>{const saved=getSavedCallerCode();if(!saved)return;callerCodeEditing=!callerCodeEditing;if(callerCodeEditing){q('#busCallerCodeInput').value='';setTimeout(()=>q('#busCallerCodeInput').focus(),0)}else q('#busCallerCodeInput').value=saved;updateCallerResumeUi()});
-  q('#startBusGoogle').addEventListener('click',()=>createCallerRoom('google'));q('#connectBusGoogle').addEventListener('click',connectCallerGoogle);q('#startBusCaller').addEventListener('click',()=>createCallerRoom('pin'));q('#joinBusRoom').addEventListener('click',joinTeacherRoom);q('#sendBusCall').addEventListener('click',sendCall);q('#busNumberInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sendCall()}});q('#clearBusCall').addEventListener('click',clearCurrent);q('#clearAllBuses').addEventListener('click',clearAllBuses);q('#clearBusHistory').addEventListener('click',clearHistory);q('#closeBusRoom').addEventListener('click',closeRoom);q('#leaveBusRoom').addEventListener('click',leaveRoom);q('#copyBusRoomCode').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(code);showToast('Bus Call room code copied')}catch{showToast(`Room code: ${code}`)}});q('#dismissBusPopup').addEventListener('click',()=>popup.hidden=true);q('#dismissBusPopupMain').addEventListener('click',()=>popup.hidden=true);q('#testBusAlert').addEventListener('click',()=>{try{audioContext=audioContext||new (window.AudioContext||window.webkitAudioContext)()}catch{}beep();showPopup({number:'123',note:'This is a test alert.',stage:selectedStage,calledAt:Date.now()},{test:true})});q('#busSoundEnabled').addEventListener('change',saveTeacherPrefs);
+  q('#startBusGoogle').addEventListener('click',()=>createCallerRoom('google'));q('#connectBusGoogle').addEventListener('click',connectCallerGoogle);q('#startBusCaller').addEventListener('click',()=>createCallerRoom('pin'));q('#joinBusRoom').addEventListener('click',joinTeacherRoom);q('#sendBusCall').addEventListener('click',sendCall);q('#busNumberInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sendCall()}});q('#clearBusCall').addEventListener('click',clearCurrent);q('#clearAllBuses').addEventListener('click',clearAllBuses);q('#clearBusHistory').addEventListener('click',clearHistory);q('#closeBusRoom').addEventListener('click',closeRoom);q('#leaveBusRoom').addEventListener('click',leaveRoom);q('#copyBusRoomCode').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(code);showToast('Bus Call room code copied')}catch{showToast(`Room code: ${code}`)}});q('#dismissBusPopup').addEventListener('click',()=>popup.hidden=true);q('#dismissBusPopupMain').addEventListener('click',()=>popup.hidden=true);q('#testBusAlert').addEventListener('click',()=>{try{audioContext=audioContext||new (window.AudioContext||window.webkitAudioContext)()}catch{}const testValue=allActiveCalls(room).length?room:{currentCall:{id:'test',number:'123',numbers:['123'],note:'This is a test alert.',stage:selectedStage,stages:[selectedStage],calledAt:Date.now()}};showActivePopup(testValue,{heading:'🚌 TEST — ALL ACTIVE BUSES',timeLabel:'Test alert',test:true})});q('#busSoundEnabled').addEventListener('change',saveTeacherPrefs);
   q('#toggleBusAddOn').addEventListener('click',()=>setAddOnPanel(q('#busAddOnPanel').hidden));
   q('#cancelBusAddOn').addEventListener('click',()=>setAddOnPanel(false));
   q('#clearBusAddOns').addEventListener('click',clearAddOns);
@@ -657,6 +704,7 @@
   panel.querySelectorAll('[data-bus-addon-preset]').forEach(button=>button.addEventListener('click',()=>selectAddOnPreset(button.dataset.busAddonPreset)));
   panel.querySelectorAll('[data-bus-call-stage]').forEach(button=>button.addEventListener('click',()=>setCallStage(button.dataset.busCallStage)));
   ['#busCallerCodeInput','#busTeacherCodeInput'].forEach(sel=>q(sel).addEventListener('input',e=>{const pos=e.target.selectionStart;e.target.value=normalizeCode(e.target.value);try{e.target.setSelectionRange(pos,pos)}catch{}}));
+  window.addEventListener('resize',()=>{if(!popup.hidden){fitPopupGrid(popupGrid?.children.length||0);fitCardNumbers(popupGrid)}const activeCount=allActiveCalls(room).length;if(activeCount){fitBoardGrid(activeCount);fitCardNumbers(q('#busActiveCallGrid'))}});
   window.addEventListener('beforeunload',()=>{if(role==='teacher'&&code&&busUser&&fb){try{fb.update(listenerRef(code,busUser.uid),{connected:false,lastSeen:Date.now()})}catch{}}/* Caller disconnect is handled server-side by Firebase onDisconnect. */});
   window.openBusCall=()=>setCalculatorMode('bus-call');
   window.refreshBusCall=()=>{if(role&&code)watchRoom()};

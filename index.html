@@ -28,7 +28,7 @@
   <link rel="stylesheet" href="quiz-print.css?v=20260913-2" />
   <link rel="stylesheet" href="calculator.css?v=20260915-wheel-colors-1" />
   <link rel="stylesheet" href="event-signup.css?v=20260912-14" />
-  <link rel="stylesheet" href="bus-call.css?v=20260917-multi-addon-group" />
+  <link rel="stylesheet" href="bus-call.css?v=20260917-fullscreen-all-active" />
   <link rel="stylesheet" href="seating.css?v=20260916-quiz-disabled-desks-1" />
   <link rel="stylesheet" href="rgb-theme.css?v=20260916-all-points-1" />
   <link rel="stylesheet" href="keyboard-realistic.css?v=20260915-unified-keyboard-1" />
@@ -698,8 +698,9 @@ Fish = ညၣ်</textarea>
                 <button type="button" class="bus-stage-option last" data-bus-call-stage="last" aria-pressed="false">Last Call</button>
               </div>
             </fieldset>
-            <label for="busNumberInput">Bus number</label>
-            <div class="bus-call-entry-row"><input id="busNumberInput" maxlength="18" inputmode="text" autocomplete="off" placeholder="123" aria-label="Bus number" /><button class="bus-call-send" id="sendBusCall" type="button">Call Bus</button></div>
+            <label for="busNumberInput">Main bus number(s)</label>
+            <div class="bus-call-entry-row"><input id="busNumberInput" maxlength="120" inputmode="text" autocomplete="off" placeholder="125 87 54" aria-label="Main bus numbers separated by spaces" /><button class="bus-call-send" id="sendBusCall" type="button">Call Bus</button></div>
+            <small class="bus-main-number-help">Enter one bus or several buses separated by spaces, for example: <strong>125 87 54</strong>. Each bus appears as its own full-size active tile.</small>
             <label class="bus-note-field">Optional note <input id="busCallNoteInput" maxlength="80" autocomplete="off" placeholder="Front doors, Door 3, loading now…" /></label>
             <div class="bus-addon-launch"><button class="button ghost bus-addon-toggle" id="toggleBusAddOn" type="button" aria-expanded="false" aria-controls="busAddOnPanel">＋ Add-On Buses</button><span>Use this when an extra bus shows up after the regular lineup.</span></div>
             <section class="bus-addon-panel" id="busAddOnPanel" hidden aria-label="Add-On Bus caller">
@@ -759,15 +760,11 @@ Fish = ညၣ်</textarea>
         <p class="bus-call-error" id="busCallError" role="alert"></p>
       </section>
 
-      <div class="bus-call-popup" id="busCallPopup" hidden role="dialog" aria-modal="true" aria-labelledby="busPopupNumber">
+      <div class="bus-call-popup" id="busCallPopup" hidden role="dialog" aria-modal="true" aria-labelledby="busPopupHeading">
         <div class="bus-popup-card">
-          <div class="bus-popup-top"><span id="busPopupHeading">🚌 BUS CALL</span><button id="dismissBusPopup" type="button" aria-label="Dismiss bus call">×</button></div>
-          <div class="bus-popup-stage first" id="busPopupStage">FIRST CALL</div>
-          <div class="bus-popup-label">BUS</div>
-          <strong id="busPopupNumber">—</strong>
-          <p id="busPopupNote" hidden></p>
-          <div class="bus-popup-regular-context" id="busPopupRegularContext" hidden></div>
-          <time id="busPopupTime">Called just now</time>
+          <div class="bus-popup-top"><span id="busPopupHeading">🚌 ACTIVE BUS CALLS</span><button id="dismissBusPopup" type="button" aria-label="Dismiss bus call">×</button></div>
+          <div class="bus-popup-status-row"><div class="bus-popup-stage active-board" id="busPopupStage">ACTIVE BUSES</div><time id="busPopupTime">Called just now</time></div>
+          <div class="bus-popup-active-grid" id="busPopupActiveGrid" aria-live="assertive" aria-atomic="true"></div>
           <button class="bus-popup-dismiss" id="dismissBusPopupMain" type="button">Dismiss</button>
         </div>
       </div>
@@ -972,7 +969,7 @@ Taylor</textarea><small>Enter one student per line.</small></label>
   <script src="games.js?v=20260915-unified-keyboard-1"></script>
   <script src="custom-games.js?v=20260915-unified-keyboard-1"></script>
   <script src="race.js?v=20260915-unified-keyboard-1"></script>
-  <script src="bus-call.js?v=20260917-multi-addon-group"></script>
+  <script src="bus-call.js?v=20260917-fullscreen-all-active"></script>
   <script src="race-features.js?v=20260914-race-permission-fix"></script>
   <script src="quiz.js?v=20260916-all-points-1"></script>
   <script src="quiz-classroom.js?v=20260916-paste-import-1"></script>
