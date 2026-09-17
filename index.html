@@ -28,7 +28,7 @@
   <link rel="stylesheet" href="quiz-print.css?v=20260913-2" />
   <link rel="stylesheet" href="calculator.css?v=20260915-wheel-colors-1" />
   <link rel="stylesheet" href="event-signup.css?v=20260912-14" />
-  <link rel="stylesheet" href="bus-call.css?v=20260917-flash-stage-keep-fullscreen" />
+  <link rel="stylesheet" href="bus-call.css?v=20260917-all-clear" />
   <link rel="stylesheet" href="seating.css?v=20260916-quiz-disabled-desks-1" />
   <link rel="stylesheet" href="rgb-theme.css?v=20260916-all-points-1" />
   <link rel="stylesheet" href="keyboard-realistic.css?v=20260915-unified-keyboard-1" />
@@ -729,7 +729,7 @@ Fish = ညၣ်</textarea>
               <div class="bus-addon-actions"><button class="button ghost" id="clearBusAddOns" type="button">Clear active add-on buses</button><button class="button ghost" id="cancelBusAddOn" type="button">Hide Add-On Buses</button></div>
             </section>
             <section class="bus-bulk-call-panel" id="busBulkCallPanel" hidden aria-label="Call all active buses together"><div class="bus-bulk-call-copy"><span>MAIN + ALL ADD-ONS</span><strong>Call every active bus together</strong><small id="busBulkCallSummary">—</small></div><div class="bus-bulk-call-actions"><button type="button" class="bus-bulk-call-button second" id="busCallAllSecond">Second Call — All Active Buses</button><button type="button" class="bus-bulk-call-button last" id="busCallAllLast">Last Call — All Active Buses</button></div></section>
-            <div class="bus-caller-actions"><button class="button ghost" id="clearBusCall" type="button">Clear main bus</button><button class="button danger" id="clearAllBuses" type="button">Clear ALL buses</button><button class="button ghost" id="leaveBusCaller" type="button">Leave caller mode</button><button class="button ghost" id="closeBusRoom" type="button">End session — keep code reserved</button></div>
+            <section class="bus-all-clear-launch" aria-label="Dismissal all clear"><div><span>DISMISSAL COMPLETE</span><strong>Announce ALL CLEAR to every classroom</strong><small>The school lineup is checked for Last Call before this is sent.</small></div><button class="bus-all-clear-button" id="sendBusAllClear" type="button">✓ ALL CLEAR</button></section><div class="bus-caller-actions"><button class="button ghost" id="clearBusCall" type="button">Clear main bus</button><button class="button danger" id="clearAllBuses" type="button">Clear ALL buses</button><button class="button ghost" id="leaveBusCaller" type="button">Leave caller mode</button><button class="button ghost" id="closeBusRoom" type="button">End session — keep code reserved</button></div>
             <p class="bus-call-status" id="busCallerStatus">Ready to call a bus.</p>
           </div>
           <section class="bus-history-card"><div class="bus-history-heading"><div><span>RECENT CALLS</span><strong>Automatically clears after 1 hour</strong></div><button id="clearBusHistory" type="button">Clear history</button></div><div class="bus-history-list" id="busCallHistory"><p>No buses called yet.</p></div></section>
@@ -975,7 +975,7 @@ Taylor</textarea><small>Enter one student per line.</small></label>
   <script src="games.js?v=20260915-unified-keyboard-1"></script>
   <script src="custom-games.js?v=20260915-unified-keyboard-1"></script>
   <script src="race.js?v=20260915-unified-keyboard-1"></script>
-  <script src="bus-call.js?v=20260917-stage-aware-warning"></script>
+  <script src="bus-call.js?v=20260917-all-clear"></script>
   <script src="race-features.js?v=20260914-race-permission-fix"></script>
   <script src="quiz.js?v=20260916-all-points-1"></script>
   <script src="quiz-classroom.js?v=20260916-paste-import-1"></script>
