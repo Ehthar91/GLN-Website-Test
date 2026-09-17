@@ -706,7 +706,6 @@ Fish = ညၣ်</textarea>
             <label for="busNumberInput">Main bus number(s)</label>
             <div class="bus-call-entry-row"><input id="busNumberInput" maxlength="120" inputmode="text" autocomplete="off" placeholder="125 87 54" aria-label="Main bus numbers separated by spaces" /><button class="bus-call-send" id="sendBusCall" type="button">Call Bus</button></div>
             <small class="bus-main-number-help">Enter one bus or several buses separated by spaces, for example: <strong>125 87 54</strong>. Each bus appears as its own full-size active tile.</small>
-            <p class="bus-duplicate-warning" id="busMainDuplicateWarning" hidden></p>
             <label class="bus-note-field">Optional note <input id="busCallNoteInput" maxlength="80" autocomplete="off" placeholder="Front doors, Door 3, loading now…" /></label>
             <div class="bus-addon-launch"><button class="button ghost bus-addon-toggle" id="toggleBusAddOn" type="button" aria-expanded="false" aria-controls="busAddOnPanel">＋ Add-On Buses</button><span>Use this when an extra bus shows up after the regular lineup.</span></div>
             <section class="bus-addon-panel" id="busAddOnPanel" hidden aria-label="Add-On Bus caller">
@@ -724,7 +723,6 @@ Fish = ညၣ်</textarea>
               </fieldset>
               <label for="busAddOnNumberInput">Add-on bus number(s)</label>
               <div class="bus-call-entry-row"><input id="busAddOnNumberInput" maxlength="120" inputmode="text" autocomplete="off" placeholder="125 87 54" aria-label="Add-on bus numbers separated by spaces" /><button class="bus-call-send bus-addon-send" id="sendBusAddOn" type="button">Send Add-On • First Call</button></div><small class="bus-addon-number-help">Enter several buses with spaces, for example: <strong>125 87 54</strong>. Every bus stays active as its own large classroom tile.</small>
-              <p class="bus-duplicate-warning" id="busAddOnDuplicateWarning" hidden></p>
               <label class="bus-note-field">Optional note <input id="busAddOnNoteInput" maxlength="80" autocomplete="off" placeholder="Just arrived, front doors, loading now…" /></label>
               <p class="bus-addon-layer-note">Add-on buses stay separate from the regular bus call, so the regular bus remains on classroom screens.</p>
               <div class="bus-caller-addon-summary" id="busCallerAddOnSummary" hidden><div><span>ACTIVE ADD-ON BUSES</span><strong id="busCallerAddOnSummaryText">—</strong></div><button class="button primary" id="newBusAddOn" type="button">＋ Add another add-on bus</button></div>
@@ -760,7 +758,7 @@ Fish = ညၣ်</textarea>
               <div class="bus-board-current bus-display-call-card" id="busRegularCallCard" aria-atomic="true"><span id="busBoardLabel">WAITING FOR THE NEXT BUS</span><strong id="busBoardNumber">—</strong><p class="bus-display-call-note" id="busBoardNote" hidden></p></div>
               <section class="bus-active-addons" id="busActiveAddOns" hidden aria-label="Active add-on buses"><div class="bus-active-addons-heading"><span>ADD-ON BUSES</span><strong>Also active</strong></div><div class="bus-active-addon-list" id="busActiveAddOnList"></div></section>
             </div>
-            <details class="bus-teacher-roster" id="busTeacherRosterPanel" hidden><summary><span>Not Called Yet</span><strong id="busTeacherRosterCount">0 buses</strong></summary><div class="bus-teacher-roster-list" id="busTeacherRosterList"></div></details><div class="bus-classroom-options"><label class="bus-sound-toggle"><input id="busSoundEnabled" type="checkbox" checked /><span>Play alert sound</span></label><button class="button ghost" id="testBusAlert" type="button">Test popup</button><button class="button ghost" id="leaveBusRoom" type="button">Leave room</button></div>
+            <div class="bus-teacher-roster" id="busTeacherRosterPanel" hidden><div class="bus-teacher-roster-heading"><span>Not Called Yet</span><strong id="busTeacherRosterCount">0 buses</strong></div><div class="bus-teacher-roster-list" id="busTeacherRosterList"></div></div><div class="bus-classroom-options"><label class="bus-sound-toggle"><input id="busSoundEnabled" type="checkbox" checked /><span>Play alert sound</span></label><button class="button ghost" id="testBusAlert" type="button">Test popup</button><button class="button ghost" id="leaveBusRoom" type="button">Leave room</button></div>
           </div>
         </section>
         </div>
@@ -771,6 +769,7 @@ Fish = ညၣ်</textarea>
         <div class="bus-popup-card">
           <div class="bus-popup-top"><span id="busPopupHeading">🚌 ACTIVE BUS CALLS</span><button id="dismissBusPopup" type="button" aria-label="Dismiss bus call">×</button></div>
           <div class="bus-popup-status-row"><div class="bus-popup-stage active-board" id="busPopupStage">ACTIVE BUSES</div><time id="busPopupTime">Called just now</time></div>
+          <div class="bus-popup-roster" id="busPopupRoster" hidden aria-label="School buses not called yet"><div class="bus-popup-roster-heading"><span>NOT CALLED YET</span><strong id="busPopupRosterCount"></strong></div><div class="bus-popup-roster-list" id="busPopupRosterList"></div></div>
           <div class="bus-popup-active-grid" id="busPopupActiveGrid" aria-live="assertive" aria-atomic="true"></div>
           <button class="bus-popup-dismiss" id="dismissBusPopupMain" type="button">Dismiss</button>
         </div>
