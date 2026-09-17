@@ -6,7 +6,7 @@
   const connection=q('#busCallConnection'),setup=q('#busCallSetup'),callerConsole=q('#busCallerConsole'),teacherConsole=q('#busClassroomConsole'),errorEl=q('#busCallError');
   const popup=q('#busCallPopup'),popupNumber=q('#busPopupNumber'),popupNote=q('#busPopupNote'),popupTime=q('#busPopupTime'),popupStage=q('#busPopupStage');
   let busDb=null,busUser=null,callerAuth=null,callerDatabase=null,googleCallerAuth=null,googleCallerDatabase=null;
-  let role='',code='',room=null,unsubscribe=null,presenceDisconnect=null,lastCallId='',audioContext=null,selectedStage='first';
+  let role='',code='',room=null,unsubscribe=null,presenceDisconnect=null,lastCallId='',audioContext=null,selectedStage='first',callerCodeEditing=false;
   const teacherSetup=q('#busTeacherSetup');
   const roleTabs=Array.from(panel.querySelectorAll('[data-bus-role]'));
   let fullscreenActive=false,fullscreenHome=null,popupHome=null,fullscreenFocus=null;
@@ -94,6 +94,16 @@
   const formatTime=value=>{const date=new Date(Number(value)||Date.now());return date.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})};
   function saveTeacherPrefs(){try{localStorage.setItem('glnBusCallCode',code||normalizeCode(q('#busTeacherCodeInput').value));localStorage.setItem('glnBusCallTeacherName',q('#busTeacherNameInput').value.trim());localStorage.setItem('glnBusCallSound',q('#busSoundEnabled').checked?'1':'0')}catch{}}
   function restorePrefs(){try{q('#busTeacherCodeInput').value=normalizeCode(localStorage.getItem('glnBusCallCode')||'');q('#busTeacherNameInput').value=localStorage.getItem('glnBusCallTeacherName')||'';q('#busSoundEnabled').checked=localStorage.getItem('glnBusCallSound')!=='0'}catch{}}
+  function getSavedCallerCode(){try{return normalizeCode(localStorage.getItem('glnBusCallerCode')||'')}catch{return ''}}
+  function saveCallerCode(value){const saved=normalizeCode(value);if(!saved)return;try{localStorage.setItem('glnBusCallerCode',saved)}catch{}}
+  function updateCallerResumeUi(){
+    const saved=getSavedCallerCode(),card=q('#busCallerSavedRoom'),field=q('#busCallerCodeField'),choice=q('#busCallerRoomChoice'),savedCode=q('#busCallerSavedRoomCode'),pinHelp=q('#busCallerPinHelp'),start=q('#startBusCaller');
+    if(!saved){callerCodeEditing=true;card.hidden=true;field.hidden=false;start.textContent='Start / Reopen Caller Room';pinHelp.textContent='Choose a PIN for a new room. Keep it private; classroom teachers only need the room code.';return}
+    card.hidden=false;savedCode.textContent=saved;field.hidden=!callerCodeEditing;
+    choice.textContent=callerCodeEditing?`Use ${saved} instead`:'Use a different room code';
+    if(!callerCodeEditing){q('#busCallerCodeInput').value=saved;start.textContent=`Reopen ${saved} with PIN`;pinHelp.textContent=`Enter your caller PIN to reopen ${saved}. The room code is already remembered on this device.`}
+    else{start.textContent='Start / Reopen Caller Room';pinHelp.textContent=`Enter a different room code below, or choose “Use ${saved} instead” to reopen your saved room.`}
+  }
   function stopWatch(){if(unsubscribe){unsubscribe();unsubscribe=null}}
   async function stopPresence(remove=true){if(presenceDisconnect){try{await presenceDisconnect.cancel()}catch{}presenceDisconnect=null}if(remove&&role==='teacher'&&code&&busUser&&fb){try{await fb.remove(listenerRef(code,busUser.uid))}catch{}}}
   function resetUi(){if(fullscreenActive)exitBusFullscreen();setup.hidden=false;callerConsole.hidden=true;teacherConsole.hidden=true;popup.hidden=true;role='';code='';room=null;lastCallId='';setConnection('Not connected');setError('');updateRoleTabs()}
@@ -166,7 +176,8 @@
     buttons.forEach(button=>button.disabled=true);
     try{
       await ensureFirebase();
-      const selected=normalizeCode(q('#busCallerCodeInput').value)||randomCode();
+      const saved=getSavedCallerCode();
+      const selected=(!callerCodeEditing&&saved)?saved:(normalizeCode(q('#busCallerCodeInput').value)||randomCode());
       q('#busCallerCodeInput').value=selected;
       const originalDb=busDb,originalUser=busUser;
       const existing=(await fb.get(roomRef(selected))).val();
@@ -191,7 +202,7 @@
       role='caller';selectRole('caller');updateRoleTabs();code=selected;
       setup.hidden=true;callerConsole.hidden=false;teacherConsole.hidden=true;
       q('#busCallerRoomCode').textContent=code;q('#busCallerPinInput').value='';
-      try{localStorage.setItem('glnBusCallerCode',code)}catch{}
+      saveCallerCode(code);callerCodeEditing=false;updateCallerResumeUi();
       callerAccountUi();watchRoom();q('#busNumberInput').focus();
     }catch(error){
       setConnection('Could not connect','problem');
@@ -232,7 +243,7 @@
       stopWatch();code=selected;
       q('#busCallerRoomCode').textContent=code;q('#busCallerCodeInput').value=code;
       q('#busNumberInput').value='';q('#busCallNoteInput').value='';
-      try{localStorage.setItem('glnBusCallerCode',code)}catch{}
+      saveCallerCode(code);callerCodeEditing=false;updateCallerResumeUi();
       watchRoom();q('#busNumberInput').focus();
     }catch(error){
       setError(claimed?`The new code ${selected} is reserved for you, but the old session could not be closed. You are still in ${previous}. Both reservations were kept. You can leave and reopen ${selected} with the same sign-in.`:friendlyError(error));
@@ -248,14 +259,16 @@
   async function leaveRoom(){stopWatch();await stopPresence(true);if(role==='caller'){try{await fb.update(roomRef(code),{callerLastActiveAt:fb.serverTimestamp()})}catch{}for(const session of [callerAuth,googleCallerAuth]){if(session){try{await fb.signOut(session)}catch{}}}}resetUi();restorePrefs()}
   q('#changeBusRoomCode').addEventListener('click',changeRoomCode);
   q('#leaveBusCaller').addEventListener('click',leaveRoom);
+  q('#busCallerRoomChoice').addEventListener('click',()=>{const saved=getSavedCallerCode();if(!saved)return;callerCodeEditing=!callerCodeEditing;if(callerCodeEditing){q('#busCallerCodeInput').value='';setTimeout(()=>q('#busCallerCodeInput').focus(),0)}else q('#busCallerCodeInput').value=saved;updateCallerResumeUi()});
   q('#startBusGoogle').addEventListener('click',()=>createCallerRoom('google'));q('#connectBusGoogle').addEventListener('click',connectCallerGoogle);q('#startBusCaller').addEventListener('click',()=>createCallerRoom('pin'));q('#joinBusRoom').addEventListener('click',joinTeacherRoom);q('#sendBusCall').addEventListener('click',sendCall);q('#busNumberInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sendCall()}});q('#clearBusCall').addEventListener('click',clearCurrent);q('#clearBusHistory').addEventListener('click',clearHistory);q('#closeBusRoom').addEventListener('click',closeRoom);q('#leaveBusRoom').addEventListener('click',leaveRoom);q('#copyBusRoomCode').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(code);showToast('Bus Call room code copied')}catch{showToast(`Room code: ${code}`)}});q('#dismissBusPopup').addEventListener('click',()=>popup.hidden=true);q('#dismissBusPopupMain').addEventListener('click',()=>popup.hidden=true);q('#testBusAlert').addEventListener('click',()=>{try{audioContext=audioContext||new (window.AudioContext||window.webkitAudioContext)()}catch{}beep();showPopup({number:'123',note:'This is a test alert.',stage:selectedStage,calledAt:Date.now()},{test:true})});q('#busSoundEnabled').addEventListener('change',saveTeacherPrefs);
   panel.querySelectorAll('[data-bus-call-stage]').forEach(button=>button.addEventListener('click',()=>setCallStage(button.dataset.busCallStage)));
   ['#busCallerCodeInput','#busTeacherCodeInput'].forEach(sel=>q(sel).addEventListener('input',e=>{const pos=e.target.selectionStart;e.target.value=normalizeCode(e.target.value);try{e.target.setSelectionRange(pos,pos)}catch{}}));
   window.addEventListener('beforeunload',()=>{if(role==='teacher'&&code&&busUser&&fb){try{fb.update(listenerRef(code,busUser.uid),{connected:false,lastSeen:Date.now()})}catch{}}});
   window.openBusCall=()=>setCalculatorMode('bus-call');
   window.refreshBusCall=()=>{if(role&&code)watchRoom()};
-  try{q('#busCallerCodeInput').value=normalizeCode(localStorage.getItem('glnBusCallerCode')||'')}catch{}
+  try{q('#busCallerCodeInput').value=getSavedCallerCode()}catch{}
   q('#busCallerPinInput').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();createCallerRoom()}});
   restorePrefs();
+  callerCodeEditing=!getSavedCallerCode();updateCallerResumeUi();
   setCallStage('first');
 })();
