@@ -281,10 +281,18 @@
       });
     });
   }
-  function makeDisplayCallCard(call,{popupTile=false}={}){
+  function stageKey(stages){return normalizeStageList(stages).join(',')}
+  function stageFlashClass(stages){
+    const normalized=normalizeStageList(stages);
+    return normalized.includes('last')?'last':normalized.includes('second')?'second':'first';
+  }
+  function makeDisplayCallCard(call,{popupTile=false,mainStages=[]}={}){
     const card=document.createElement('div');card.className=popupTile?'bus-popup-call-tile':'bus-display-call-card';
     card.classList.add(call?.isAddOn?'addon':'regular');
-    const label=document.createElement('span');label.textContent=`${callStagesLabel(call).toUpperCase()} • ${call?.isAddOn?'ADD-ON BUS':'MAIN BUS'}`;
+    const callStages=callStagesFor(call),differentFromMain=Boolean(call?.isAddOn&&mainStages.length&&stageKey(callStages)!==stageKey(mainStages));
+    if(differentFromMain)card.classList.add('addon-stage-different');
+    const label=document.createElement('span');label.className='bus-call-tile-label';label.textContent=`${callStagesLabel(call).toUpperCase()} • ${call?.isAddOn?'ADD-ON BUS':'MAIN BUS'}`;
+    if(differentFromMain)label.classList.add('bus-tile-stage-flash',stageFlashClass(callStages));
     const number=document.createElement('strong');number.textContent=cleanText(call?.number,18)||'—';number.style.setProperty('--bus-digits',Math.max(3,number.textContent.length));
     const note=document.createElement('p');note.textContent=cleanText(call?.note,80);note.hidden=!note.textContent;
     card.append(label,number,note);return card;
@@ -316,7 +324,8 @@
       card.append(label,number,note);grid.append(card);fitBoardGrid(1);fitCardNumbers(grid);return;
     }
     grid.dataset.count=String(Math.min(calls.length,36));
-    calls.forEach(call=>grid.append(makeDisplayCallCard(call)));fitBoardGrid(calls.length);fitCardNumbers(grid);
+    const mainStages=value?.currentCall?callStagesFor(value.currentCall):[];
+    calls.forEach(call=>grid.append(makeDisplayCallCard(call,{mainStages})));fitBoardGrid(calls.length);fitCardNumbers(grid);
   }
   function fitPopupGrid(count){
     if(!popupGrid||count<1)return;
@@ -329,11 +338,12 @@
     const calls=allActiveCalls(value);if(!calls.length)return;
     const headingEl=q('#busPopupHeading');if(headingEl)headingEl.textContent=heading;
     const newest=calls.reduce((latest,item)=>Number(item.calledAt||0)>Number(latest?.calledAt||0)?item:latest,calls[0]);
-    const newestStages=callStagesFor(newest),flashClass=newestStages.includes('last')?'last':newestStages.includes('second')?'second':'first';
-    popupStage.textContent=callStagesLabel(newest).toUpperCase();
+    const mainCall=value?.currentCall||null,bannerCall=mainCall||newest,mainStages=mainCall?callStagesFor(mainCall):[];
+    const bannerStages=callStagesFor(bannerCall),flashClass=stageFlashClass(bannerStages);
+    popupStage.textContent=callStagesLabel(bannerCall).toUpperCase();
     popupStage.className=`bus-popup-stage bus-stage-flash ${flashClass}`;
     popupTime.textContent=test?'Test alert':timeLabel;
-    popupGrid.innerHTML='';calls.forEach(call=>popupGrid.append(makeDisplayCallCard(call,{popupTile:true})));
+    popupGrid.innerHTML='';calls.forEach(call=>popupGrid.append(makeDisplayCallCard(call,{popupTile:true,mainStages})));
     popup.hidden=false;
     requestAnimationFrame(()=>{fitPopupGrid(calls.length);fitCardNumbers(popupGrid)});
     if(!test)beep();
