@@ -28,7 +28,7 @@
   <link rel="stylesheet" href="quiz-print.css?v=20260913-2" />
   <link rel="stylesheet" href="calculator.css?v=20260915-wheel-colors-1" />
   <link rel="stylesheet" href="event-signup.css?v=20260912-14" />
-  <link rel="stylesheet" href="bus-call.css?v=20260916-pin-resume" />
+  <link rel="stylesheet" href="bus-call.css?v=20260917-multi-addon-group" />
   <link rel="stylesheet" href="seating.css?v=20260916-quiz-disabled-desks-1" />
   <link rel="stylesheet" href="rgb-theme.css?v=20260916-all-points-1" />
   <link rel="stylesheet" href="keyboard-realistic.css?v=20260915-unified-keyboard-1" />
@@ -719,8 +719,10 @@ Fish = ညၣ်</textarea>
               <div class="bus-call-entry-row"><input id="busAddOnNumberInput" maxlength="18" inputmode="text" autocomplete="off" placeholder="Extra bus number" aria-label="Add-on bus number" /><button class="bus-call-send bus-addon-send" id="sendBusAddOn" type="button">Send Add-On • First Call + Second Call</button></div>
               <label class="bus-note-field">Optional note <input id="busAddOnNoteInput" maxlength="80" autocomplete="off" placeholder="Just arrived, front doors, loading now…" /></label>
               <p class="bus-addon-layer-note">Add-on buses stay separate from the regular bus call, so the regular bus remains on classroom screens.</p>
+              <div class="bus-caller-addon-summary" id="busCallerAddOnSummary" hidden><div><span>ACTIVE ADD-ON BUSES</span><strong id="busCallerAddOnSummaryText">—</strong></div><button class="button primary" id="newBusAddOn" type="button">＋ Add another add-on bus</button></div>
               <div class="bus-addon-actions"><button class="button ghost" id="clearBusAddOns" type="button">Clear active add-on buses</button><button class="button ghost" id="cancelBusAddOn" type="button">Hide Add-On Buses</button></div>
             </section>
+            <section class="bus-bulk-call-panel" id="busBulkCallPanel" hidden aria-label="Call all active buses together"><div class="bus-bulk-call-copy"><span>MAIN + ALL ADD-ONS</span><strong>Call every active bus together</strong><small id="busBulkCallSummary">—</small></div><div class="bus-bulk-call-actions"><button type="button" class="bus-bulk-call-button second" id="busCallAllSecond">Second Call — All Active Buses</button><button type="button" class="bus-bulk-call-button last" id="busCallAllLast">Last Call — All Active Buses</button></div></section>
             <div class="bus-caller-actions"><button class="button ghost" id="clearBusCall" type="button">Clear current call</button><button class="button ghost" id="leaveBusCaller" type="button">Leave caller mode</button><button class="button ghost" id="closeBusRoom" type="button">End session — keep code reserved</button></div>
             <p class="bus-call-status" id="busCallerStatus">Ready to call a bus.</p>
           </div>
@@ -746,8 +748,10 @@ Fish = ညၣ်</textarea>
           </div>
           <div class="bus-classroom-waiting">
             <div class="bus-waiting-icon" aria-hidden="true">🚌</div><p class="eyebrow">BUS CALLS ARE ON</p><h3 id="busWaitingTitle">Waiting for the next bus</h3><p id="busWaitingDetail">A large alert will appear on this screen when the caller sends a bus number.</p>
-            <div class="bus-board-current" aria-live="polite" aria-atomic="true"><span id="busBoardLabel">WAITING FOR THE NEXT BUS</span><strong id="busBoardNumber">—</strong></div>
-            <section class="bus-active-addons" id="busActiveAddOns" hidden aria-live="polite" aria-label="Active add-on buses"><div class="bus-active-addons-heading"><span>ADD-ON BUSES</span><strong>Also active</strong></div><div class="bus-active-addon-list" id="busActiveAddOnList"></div></section>
+            <div class="bus-active-call-grid" id="busActiveCallGrid" data-count="1" aria-live="polite">
+              <div class="bus-board-current bus-display-call-card" id="busRegularCallCard" aria-atomic="true"><span id="busBoardLabel">WAITING FOR THE NEXT BUS</span><strong id="busBoardNumber">—</strong><p class="bus-display-call-note" id="busBoardNote" hidden></p></div>
+              <section class="bus-active-addons" id="busActiveAddOns" hidden aria-label="Active add-on buses"><div class="bus-active-addons-heading"><span>ADD-ON BUSES</span><strong>Also active</strong></div><div class="bus-active-addon-list" id="busActiveAddOnList"></div></section>
+            </div>
             <div class="bus-classroom-options"><label class="bus-sound-toggle"><input id="busSoundEnabled" type="checkbox" checked /><span>Play alert sound</span></label><button class="button ghost" id="testBusAlert" type="button">Test popup</button><button class="button ghost" id="leaveBusRoom" type="button">Leave room</button></div>
           </div>
         </section>
@@ -968,7 +972,7 @@ Taylor</textarea><small>Enter one student per line.</small></label>
   <script src="games.js?v=20260915-unified-keyboard-1"></script>
   <script src="custom-games.js?v=20260915-unified-keyboard-1"></script>
   <script src="race.js?v=20260915-unified-keyboard-1"></script>
-  <script src="bus-call.js?v=20260916-pin-resume"></script>
+  <script src="bus-call.js?v=20260917-multi-addon-group"></script>
   <script src="race-features.js?v=20260914-race-permission-fix"></script>
   <script src="quiz.js?v=20260916-all-points-1"></script>
   <script src="quiz-classroom.js?v=20260916-paste-import-1"></script>

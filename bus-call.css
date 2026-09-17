@@ -80,3 +80,43 @@ body.bus-fullscreen-open{overflow:hidden}
 .bus-addon-preset-options .bus-stage-option.combo.active{border-color:#7c3aed;background:#ede9fe;color:#5b21b6;box-shadow:0 6px 16px rgba(124,58,237,.18)}
 .bus-addon-preset-options .bus-stage-option{white-space:normal;line-height:1.15}
 @media(max-width:760px){.bus-addon-preset-options{grid-template-columns:1fr 1fr}.bus-addon-preset-options .bus-stage-option:last-child{grid-column:1 / -1}}
+
+
+/* Equal-size responsive classroom call board: regular and add-on buses share the available screen. */
+.bus-active-call-grid{width:100%;max-width:1500px;display:grid;grid-template-columns:minmax(0,1fr);gap:clamp(12px,1.6vw,24px);align-items:stretch;margin:20px auto 0}
+.bus-active-call-grid[data-count="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}
+.bus-active-call-grid[data-count="3"]{grid-template-columns:repeat(3,minmax(0,1fr))}
+.bus-active-call-grid[data-count="many"]{grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr))}
+.bus-active-call-grid .bus-active-addons{display:contents;margin:0;padding:0;border:0;background:none}
+.bus-active-call-grid .bus-active-addons[hidden]{display:none!important}
+.bus-active-call-grid .bus-active-addons-heading{display:none}
+.bus-active-call-grid .bus-active-addon-list{display:contents}
+.bus-display-call-card{box-sizing:border-box;min-width:0;min-height:clamp(250px,43vh,560px);padding:clamp(20px,3vw,50px);border-radius:clamp(20px,2.5vw,34px);display:grid;grid-template-rows:auto minmax(0,1fr) auto;align-items:center;justify-items:center;text-align:center;overflow:hidden}
+.bus-board-current.bus-display-call-card{margin:0;width:auto;border:2px solid #bfdbfe;background:linear-gradient(180deg,#eff6ff 0%,#fff 100%);box-shadow:0 18px 45px rgba(37,99,235,.10)}
+.bus-active-addon-row.bus-display-call-card{grid-template-columns:1fr;gap:8px;margin:0;padding:clamp(20px,3vw,50px);border:2px solid #ddd6fe;background:linear-gradient(180deg,#faf5ff 0%,#fff 100%);box-shadow:0 18px 45px rgba(124,58,237,.10)}
+.bus-display-call-card>span,.bus-active-addon-label{align-self:start;font-size:clamp(15px,1.7vw,28px)!important;font-weight:950!important;letter-spacing:.10em!important;line-height:1.2;color:#1d4ed8!important;overflow-wrap:anywhere}
+.bus-active-addon-label{color:#6d28d9!important}
+.bus-display-call-card>strong,.bus-active-addon-row.bus-display-call-card>strong{align-self:center;min-width:0;margin:0;font-size:clamp(58px,calc(115vw / var(--bus-digits,3)),260px);font-weight:950;line-height:.88;letter-spacing:-.045em;overflow-wrap:anywhere;word-break:break-word;color:#0f172a}
+.bus-display-call-note,.bus-active-addon-meta{align-self:end;margin:0!important;max-width:100%;padding:9px 13px;border-radius:12px;background:rgba(255,255,255,.78);color:#475569!important;font-size:clamp(13px,1.25vw,20px)!important;font-style:normal!important;font-weight:800!important;line-height:1.3;overflow-wrap:anywhere;text-align:center}
+.bus-display-call-note[hidden]{visibility:hidden;display:block!important}
+.bus-active-addon-row.bus-display-call-card time{display:none}
+.bus-classroom-waiting.has-active-calls{padding-top:clamp(14px,2vw,28px)}
+.bus-classroom-waiting.has-active-calls>.bus-waiting-icon,.bus-classroom-waiting.has-active-calls>.eyebrow,.bus-classroom-waiting.has-active-calls>#busWaitingTitle,.bus-classroom-waiting.has-active-calls>#busWaitingDetail{display:none}
+.bus-classroom-waiting.has-active-calls .bus-active-call-grid{margin-top:0}
+.bus-fullscreen .bus-classroom-waiting.has-active-calls{min-height:calc(100dvh - 150px);align-content:stretch}
+.bus-fullscreen .bus-classroom-waiting.has-active-calls .bus-active-call-grid{min-height:calc(100dvh - 250px);grid-auto-rows:minmax(0,1fr)}
+.bus-fullscreen .bus-display-call-card{min-height:100%;padding:clamp(24px,3vw,58px)}
+.bus-fullscreen .bus-display-call-card>span,.bus-fullscreen .bus-active-addon-label{font-size:clamp(18px,2vw,34px)!important}
+.bus-fullscreen .bus-display-call-card>strong,.bus-fullscreen .bus-active-addon-row.bus-display-call-card>strong{font-size:clamp(72px,calc(128vw / var(--bus-digits,3)),340px)}
+.bus-fullscreen .bus-display-call-note,.bus-fullscreen .bus-active-addon-meta{font-size:clamp(16px,1.6vw,26px)!important}
+@media(max-width:900px){.bus-active-call-grid[data-count="2"],.bus-active-call-grid[data-count="3"]{grid-template-columns:1fr}.bus-display-call-card{min-height:clamp(230px,38vh,470px)}.bus-fullscreen .bus-display-call-card{min-height:clamp(260px,55vh,620px)}}
+
+
+/* Multiple add-on buses + grouped main/add-on announcements */
+.bus-caller-addon-summary{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:14px;padding:14px 16px;border:1px solid #c4b5fd;border-radius:16px;background:#f5f3ff}
+.bus-caller-addon-summary[hidden]{display:none!important}.bus-caller-addon-summary>div{display:grid;gap:3px;min-width:0}.bus-caller-addon-summary span{font-size:10px;font-weight:950;letter-spacing:.12em;color:#6d28d9}.bus-caller-addon-summary strong{font-size:16px;color:#312e81;overflow-wrap:anywhere}.bus-caller-addon-summary .button{flex:0 0 auto}
+.bus-bulk-call-panel{display:grid;grid-template-columns:minmax(0,1fr) minmax(330px,.9fr);gap:18px;margin-top:18px;padding:18px;border:2px solid #cbd5e1;border-radius:18px;background:linear-gradient(135deg,#f8fafc,#eef2ff)}.bus-bulk-call-panel[hidden]{display:none!important}.bus-bulk-call-copy{display:grid;align-content:center;gap:4px}.bus-bulk-call-copy span{font-size:10px;font-weight:950;letter-spacing:.13em;color:#475569}.bus-bulk-call-copy strong{font-size:19px;color:#0f172a}.bus-bulk-call-copy small{color:#64748b;font-weight:750;overflow-wrap:anywhere}.bus-bulk-call-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}.bus-bulk-call-button{min-height:58px;border:0;border-radius:14px;padding:12px 14px;font:inherit;font-weight:950;cursor:pointer;box-shadow:0 8px 22px rgba(15,23,42,.10)}.bus-bulk-call-button.second{background:#f59e0b;color:#451a03}.bus-bulk-call-button.last{background:#dc2626;color:#fff}.bus-bulk-call-button:hover{filter:brightness(.97);transform:translateY(-1px)}.bus-bulk-call-button:disabled{opacity:.55;cursor:not-allowed;transform:none}
+.bus-history-combined{background:#e0e7ff!important;color:#3730a3!important}
+@media(max-width:820px){.bus-caller-addon-summary{align-items:stretch;flex-direction:column}.bus-caller-addon-summary .button{width:100%}.bus-bulk-call-panel{grid-template-columns:1fr}.bus-bulk-call-actions{grid-template-columns:1fr}}
+
+.bus-call-popup.combined .bus-popup-card{width:min(980px,calc(100vw - 40px))}.bus-call-popup.combined .bus-popup-card>strong{font-size:clamp(42px,8.5vw,112px);line-height:1;overflow-wrap:anywhere;word-break:break-word}.bus-fullscreen .bus-call-popup.combined .bus-popup-card>strong{font-size:clamp(52px,9vw,140px)}
