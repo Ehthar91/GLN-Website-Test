@@ -95,6 +95,12 @@
   const setConnection=(text,state='')=>{connection.textContent=text;connection.classList.toggle('online',state==='online');connection.classList.toggle('problem',state==='problem')};
   const setError=text=>{errorEl.textContent=text||''};
   const cleanText=(value,max)=>String(value||'').trim().replace(/\s+/g,' ').slice(0,max);
+  const parseBusNumbers=value=>{
+    const parts=String(value||'').trim().split(/[\s,]+/).map(part=>cleanText(part,18)).filter(Boolean);
+    const seen=new Set(),numbers=[];
+    for(const part of parts){const key=part.toUpperCase();if(seen.has(key))continue;seen.add(key);numbers.push(part)}
+    return numbers;
+  };
   const callStageLabel=stage=>({first:'First Call',second:'Second Call',last:'Last Call'}[stage]||'Bus Call');
   const callStageClass=stage=>['first','second','last'].includes(stage)?stage:'first';
   const callStageOrder=['first','second','last'];
@@ -223,10 +229,12 @@
       const row=document.createElement('div');row.className='bus-history-row';
       const bus=document.createElement('b');
       const combinedNumbers=Array.isArray(item.numbers)?item.numbers.filter(Boolean):[];
-      bus.textContent=item.isCombined?`ALL: ${combinedNumbers.join(' + ')||item.number||'—'}`:(item.number||'—');
+      if(item.isCombined)bus.textContent=`ALL: ${combinedNumbers.join(' + ')||item.number||'—'}`;
+      else if(item.isAddOnBatch)bus.textContent=combinedNumbers.join(' + ')||item.number||'—';
+      else bus.textContent=item.number||'—';
       const detail=document.createElement('span');detail.className='bus-history-detail';
       if(item.isCombined){const together=document.createElement('strong');together.className='bus-history-addon bus-history-combined';together.textContent='ALL TOGETHER';detail.append(together)}
-      if(item.isAddOn){const addOn=document.createElement('strong');addOn.className='bus-history-addon';addOn.textContent='ADD-ON';detail.append(addOn)}
+      if(item.isAddOn){const addOn=document.createElement('strong');addOn.className='bus-history-addon';addOn.textContent=item.isAddOnBatch?'ADD-ON GROUP':'ADD-ON';detail.append(addOn)}
       callStagesFor(item).forEach(stageName=>{const stage=document.createElement('strong');stage.className=`bus-history-stage ${callStageClass(stageName)}`;stage.textContent=callStageLabel(stageName);detail.append(stage)});
       if(item.note){const note=document.createElement('em');note.textContent=item.note;detail.append(note)}
       const time=document.createElement('time');time.textContent=formatTime(item.calledAt);
@@ -246,7 +254,7 @@
       const label=document.createElement('span');label.className='bus-active-addon-label';label.textContent=`${callStagesLabel(item).toUpperCase()} • ADD-ON BUS`;
       const number=document.createElement('strong');number.textContent=cleanText(item.number,18)||'—';number.style.setProperty('--bus-digits',Math.max(3,number.textContent.length));
       const meta=document.createElement('p');meta.className='bus-active-addon-meta';
-      const note=cleanText(item.note,80);meta.textContent=note?`${note} • Called ${formatTime(item.calledAt)}`:`Called ${formatTime(item.calledAt)}`;
+      const note=cleanText(item.note,80);meta.textContent=note;meta.hidden=!note;
       row.append(label,number,meta);list.append(row);
     });
   }
@@ -296,6 +304,22 @@
     popupTime.textContent=test?'Test alert':`${call.isAddOn?'Add-On • ':''}${stageText} • Called at ${formatTime(call.calledAt)}`;
     popup.hidden=false;if(!test)beep()
   }
+  function showAddOnBatchPopup(calls,regularCall=null){
+    const items=Array.isArray(calls)?calls.filter(Boolean):[];if(!items.length)return;
+    popup.classList.add('combined');
+    const numbers=items.map(call=>cleanText(call.number,18)).filter(Boolean);
+    const stages=callStagesFor(items[0]),stageText=stageListLabel(stages),primary=stages[0]||'first';
+    const heading=q('#busPopupHeading');if(heading)heading.textContent='🚌 ADD-ON BUSES';
+    popupStage.textContent=stageText.toUpperCase();popupStage.className=`bus-popup-stage addon ${callStageClass(primary)}`;
+    popupNumber.textContent=numbers.join(' • ')||'—';popupNumber.style.setProperty('--bus-digits',Math.max(3,popupNumber.textContent.length));
+    const commonNote=cleanText(items[0]?.note,80);popupNote.textContent=commonNote||`${numbers.length} add-on buses added.`;popupNote.hidden=false;
+    if(popupRegularContext){
+      if(regularCall){popupRegularContext.textContent=`Regular call stays active: ${callStagesLabel(regularCall)} • Bus ${cleanText(regularCall.number,18)}`;popupRegularContext.hidden=false}
+      else popupRegularContext.hidden=true;
+    }
+    popupTime.textContent=`Add-On Buses • ${stageText} • Called at ${formatTime(items[0]?.calledAt)}`;
+    popup.hidden=false;beep();
+  }
   function showCombinedPopup(call){
     if(!call)return;popup.classList.add('combined');
     const numbers=Array.isArray(call.numbers)?call.numbers.map(value=>cleanText(value,18)).filter(Boolean):[];
@@ -315,11 +339,11 @@
     const regularCard=q('#busRegularCallCard'),grid=q('#busActiveCallGrid'),waiting=q('.bus-classroom-waiting'),boardNote=q('#busBoardNote');
     if(waiting)waiting.classList.toggle('has-active-calls',hasActive);
     if(regularCard)regularCard.hidden=!regular&&!!addOns.length;
-    const activeCount=Math.max(1,(regular?1:0)+addOns.length);if(grid)grid.dataset.count=activeCount>=4?'many':String(activeCount);
+    const activeCount=Math.max(1,(regular?1:0)+addOns.length);if(grid)grid.dataset.count=String(Math.min(activeCount,12));
     q('#busBoardNumber').textContent=regular?cleanText(regular.number,18):'—';
     q('#busBoardLabel').textContent=regular?`${callStagesLabel(regular).toUpperCase()} • REGULAR BUS`:'WAITING FOR THE NEXT REGULAR BUS';
     q('#busBoardNumber').style.setProperty('--bus-digits',Math.max(3,String(regular?.number||'').length));
-    if(boardNote){boardNote.textContent=regular?`${regular.note?`${cleanText(regular.note,80)} • `:''}Called ${formatTime(regular.calledAt)}`:'';boardNote.hidden=!regular}
+    if(boardNote){const note=regular?cleanText(regular.note,80):'';boardNote.textContent=note;boardNote.hidden=!note}
     q('#busTeacherConnectionText').textContent='Connected';
     renderActiveAddOns(value);
 
@@ -333,9 +357,10 @@
     // A combined announcement wins over individual popups because it represents the main bus + every active add-on.
     if(combinedIsNew){
       showCombinedPopup(combined);
-    }else if(unseenAddOns.length){
-      const newest=unseenAddOns[unseenAddOns.length-1];
-      showPopup(newest,{regularCall:regular});
+    }else if(unseenAddOns.length>1){
+      showAddOnBatchPopup(unseenAddOns,regular);
+    }else if(unseenAddOns.length===1){
+      showPopup(unseenAddOns[0],{regularCall:regular});
     }else if(regularIsNew){
       showPopup(regular);
     }
@@ -511,16 +536,27 @@
   }
   async function sendAddOnCall(){
     if(role!=='caller'||!code)return;
-    const number=cleanText(q('#busAddOnNumberInput').value,18),note=cleanText(q('#busAddOnNoteInput').value,80),stages=getAddOnStages();
-    if(!number){setError('Enter the add-on bus number first.');q('#busAddOnNumberInput').focus();return}
+    const raw=q('#busAddOnNumberInput').value,numbers=parseBusNumbers(raw),note=cleanText(q('#busAddOnNoteInput').value,80),stages=getAddOnStages();
+    if(!numbers.length){setError('Enter one or more add-on bus numbers. Separate multiple buses with spaces.');q('#busAddOnNumberInput').focus();return}
+    if(numbers.length>12){setError('Enter up to 12 add-on buses at one time.');q('#busAddOnNumberInput').focus();return}
     if(!stages.length){setError('Select at least one call type for the add-on bus.');return}
     setError('');const button=q('#sendBusAddOn');button.disabled=true;
     try{
-      const id=`${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
-      const call={id,number,note,stage:stages[0],stages,isAddOn:true,calledAt:fb.serverTimestamp()};
+      const stamp=fb.serverTimestamp(),updates={combinedCall:null,lastActivityAt:stamp,callerLastActiveAt:stamp};
+      const existing=activeAddOnCalls(room),existingByNumber=new Map(existing.map(item=>[cleanText(item.number,18).toUpperCase(),item]));
+      const created=[];
+      numbers.forEach((number,index)=>{
+        const previous=existingByNumber.get(number.toUpperCase());
+        if(previous?.id)updates[`addOnCalls/${previous.id}`]=null;
+        const id=`${Date.now()}-${index}-${Math.random().toString(36).slice(2,7)}`;
+        const call={id,number,note,stage:stages[0],stages,isAddOn:true,calledAt:stamp};
+        updates[`addOnCalls/${id}`]=call;created.push(call);
+      });
       const historyKey=fb.push(fb.ref(busDb,`quizRooms/${roomKey(code)}/history`)).key;
-      await fb.update(roomRef(code),{[`addOnCalls/${id}`]:call,combinedCall:null,[`history/${historyKey}`]:call,lastActivityAt:fb.serverTimestamp(),callerLastActiveAt:fb.serverTimestamp()});
-      q('#busAddOnNoteInput').value='';q('#busAddOnNumberInput').focus();q('#busAddOnNumberInput').select()
+      updates[`history/${historyKey}`]={id:`addon-batch-${Date.now()}`,number:numbers.join(' + '),numbers,note,stage:stages[0],stages,isAddOn:true,isAddOnBatch:numbers.length>1,calledAt:stamp};
+      await fb.update(roomRef(code),updates);
+      q('#busAddOnNoteInput').value='';q('#busAddOnNumberInput').focus();q('#busAddOnNumberInput').select();
+      q('#busCallerStatus').textContent=numbers.length>1?`${numbers.length} add-on buses sent together: ${numbers.join(', ')}.`:`Add-on Bus ${numbers[0]} sent.`;
     }catch(error){setError(friendlyError(error))}finally{button.disabled=false}
   }
   function prepareNewAddOn(){
@@ -548,6 +584,17 @@
   }
   async function clearCurrent(){if(role!=='caller'||!code)return;try{await fb.update(roomRef(code),{currentCall:null,combinedCall:null,lastActivityAt:fb.serverTimestamp(),callerLastActiveAt:fb.serverTimestamp()});q('#busCallerStatus').textContent=activeAddOnCalls(room).length?'Regular call cleared. Active add-on buses stay on.':'Regular call cleared.'}catch(error){setError(friendlyError(error))}}
   async function clearAddOns(){if(role!=='caller'||!code)return;const count=activeAddOnCalls(room).length;if(!count){q('#busCallerStatus').textContent='No active add-on buses to clear.';return}if(!confirm(`Clear ${count} active add-on bus${count===1?'':'es'}? The regular bus call will stay on.`))return;try{await fb.update(roomRef(code),{addOnCalls:null,combinedCall:null,lastActivityAt:fb.serverTimestamp(),callerLastActiveAt:fb.serverTimestamp()});q('#busCallerStatus').textContent='Active add-on buses cleared. Regular call stays on.'}catch(error){setError(friendlyError(error))}}
+  async function clearAllBuses(){
+    if(role!=='caller'||!code)return;
+    const regular=room?.currentCall||null,addOns=activeAddOnCalls(room);
+    if(!regular&&!addOns.length){q('#busCallerStatus').textContent='No active buses to clear.';return}
+    const count=(regular?1:0)+addOns.length;
+    if(!confirm(`Clear all ${count} active bus${count===1?'':'es'} from classroom screens?`))return;
+    try{
+      await fb.update(roomRef(code),{currentCall:null,addOnCalls:null,combinedCall:null,lastActivityAt:fb.serverTimestamp(),callerLastActiveAt:fb.serverTimestamp()});
+      q('#busCallerStatus').textContent='All active buses cleared.';
+    }catch(error){setError(friendlyError(error))}
+  }
   async function clearHistory(){if(role!=='caller'||!code||!confirm('Clear the recent Bus Call history for this room?'))return;try{await fb.update(roomRef(code),{history:null,callerLastActiveAt:fb.serverTimestamp()})}catch(error){setError(friendlyError(error))}}
   async function changeRoomCode(){
     if(role!=='caller'||!code||q('#changeBusRoomCode').disabled||q('#connectBusGoogle').disabled||q('#sendBusCall').disabled)return;
@@ -558,7 +605,7 @@
     if(selected===code){setError('That is already your room code. Nothing has changed.');return}
     const previous=code;
     if(!confirm(`Change from ${previous} to ${selected}?\n\nThis starts a new session. Teachers must join ${selected}.\n${previous} stays reserved until 30 days after its last caller activity. Its saved history will be kept.\n\nChoose OK only if you intend to change the room code.`))return;
-    const controls=['#changeBusRoomCode','#connectBusGoogle','#sendBusCall','#sendBusAddOn','#toggleBusAddOn','#clearBusCall','#clearBusHistory','#closeBusRoom','#leaveBusCaller'].map(q);
+    const controls=['#changeBusRoomCode','#connectBusGoogle','#sendBusCall','#sendBusAddOn','#toggleBusAddOn','#clearBusCall','#clearAllBuses','#clearBusHistory','#closeBusRoom','#leaveBusCaller'].map(q);
     controls.forEach(button=>button.disabled=true);
     setError('');let claimed=false;
     try{
@@ -598,7 +645,7 @@
   q('#changeBusRoomCode').addEventListener('click',changeRoomCode);
   q('#leaveBusCaller').addEventListener('click',leaveRoom);
   q('#busCallerRoomChoice').addEventListener('click',()=>{const saved=getSavedCallerCode();if(!saved)return;callerCodeEditing=!callerCodeEditing;if(callerCodeEditing){q('#busCallerCodeInput').value='';setTimeout(()=>q('#busCallerCodeInput').focus(),0)}else q('#busCallerCodeInput').value=saved;updateCallerResumeUi()});
-  q('#startBusGoogle').addEventListener('click',()=>createCallerRoom('google'));q('#connectBusGoogle').addEventListener('click',connectCallerGoogle);q('#startBusCaller').addEventListener('click',()=>createCallerRoom('pin'));q('#joinBusRoom').addEventListener('click',joinTeacherRoom);q('#sendBusCall').addEventListener('click',sendCall);q('#busNumberInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sendCall()}});q('#clearBusCall').addEventListener('click',clearCurrent);q('#clearBusHistory').addEventListener('click',clearHistory);q('#closeBusRoom').addEventListener('click',closeRoom);q('#leaveBusRoom').addEventListener('click',leaveRoom);q('#copyBusRoomCode').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(code);showToast('Bus Call room code copied')}catch{showToast(`Room code: ${code}`)}});q('#dismissBusPopup').addEventListener('click',()=>popup.hidden=true);q('#dismissBusPopupMain').addEventListener('click',()=>popup.hidden=true);q('#testBusAlert').addEventListener('click',()=>{try{audioContext=audioContext||new (window.AudioContext||window.webkitAudioContext)()}catch{}beep();showPopup({number:'123',note:'This is a test alert.',stage:selectedStage,calledAt:Date.now()},{test:true})});q('#busSoundEnabled').addEventListener('change',saveTeacherPrefs);
+  q('#startBusGoogle').addEventListener('click',()=>createCallerRoom('google'));q('#connectBusGoogle').addEventListener('click',connectCallerGoogle);q('#startBusCaller').addEventListener('click',()=>createCallerRoom('pin'));q('#joinBusRoom').addEventListener('click',joinTeacherRoom);q('#sendBusCall').addEventListener('click',sendCall);q('#busNumberInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sendCall()}});q('#clearBusCall').addEventListener('click',clearCurrent);q('#clearAllBuses').addEventListener('click',clearAllBuses);q('#clearBusHistory').addEventListener('click',clearHistory);q('#closeBusRoom').addEventListener('click',closeRoom);q('#leaveBusRoom').addEventListener('click',leaveRoom);q('#copyBusRoomCode').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(code);showToast('Bus Call room code copied')}catch{showToast(`Room code: ${code}`)}});q('#dismissBusPopup').addEventListener('click',()=>popup.hidden=true);q('#dismissBusPopupMain').addEventListener('click',()=>popup.hidden=true);q('#testBusAlert').addEventListener('click',()=>{try{audioContext=audioContext||new (window.AudioContext||window.webkitAudioContext)()}catch{}beep();showPopup({number:'123',note:'This is a test alert.',stage:selectedStage,calledAt:Date.now()},{test:true})});q('#busSoundEnabled').addEventListener('change',saveTeacherPrefs);
   q('#toggleBusAddOn').addEventListener('click',()=>setAddOnPanel(q('#busAddOnPanel').hidden));
   q('#cancelBusAddOn').addEventListener('click',()=>setAddOnPanel(false));
   q('#clearBusAddOns').addEventListener('click',clearAddOns);
