@@ -703,19 +703,23 @@ Fish = ညၣ်</textarea>
             <label class="bus-note-field">Optional note <input id="busCallNoteInput" maxlength="80" autocomplete="off" placeholder="Front doors, Door 3, loading now…" /></label>
             <div class="bus-addon-launch"><button class="button ghost bus-addon-toggle" id="toggleBusAddOn" type="button" aria-expanded="false" aria-controls="busAddOnPanel">＋ Add-On Buses</button><span>Use this when an extra bus shows up after the regular lineup.</span></div>
             <section class="bus-addon-panel" id="busAddOnPanel" hidden aria-label="Add-On Bus caller">
-              <div class="bus-addon-heading"><div><span>ADD-ON BUSES</span><strong>Call an extra bus immediately</strong></div><small>Select one or more call types to announce together.</small></div>
+              <div class="bus-addon-heading"><div><span>ADD-ON BUSES</span><strong>Call an extra bus immediately</strong></div><small>Choose one call option. Combination buttons send multiple stages together.</small></div>
               <fieldset class="bus-call-stage-group bus-addon-stage-group">
-                <legend>Send these call types together</legend>
-                <div class="bus-call-stage-options" role="group" aria-label="Add-on bus call types">
-                  <button type="button" class="bus-stage-option first active" data-bus-addon-stage="first" aria-pressed="true">First Call</button>
-                  <button type="button" class="bus-stage-option second active" data-bus-addon-stage="second" aria-pressed="true">Second Call</button>
-                  <button type="button" class="bus-stage-option last" data-bus-addon-stage="last" aria-pressed="false">Last Call</button>
+                <legend>Add-on call option</legend>
+                <div class="bus-call-stage-options bus-addon-preset-options" role="group" aria-label="Add-on bus call option">
+                  <button type="button" class="bus-stage-option first" data-bus-addon-preset="first" aria-pressed="false">First Call</button>
+                  <button type="button" class="bus-stage-option second" data-bus-addon-preset="second" aria-pressed="false">Second Call</button>
+                  <button type="button" class="bus-stage-option last" data-bus-addon-preset="last" aria-pressed="false">Last Call</button>
+                  <button type="button" class="bus-stage-option combo active" data-bus-addon-preset="first,second" aria-pressed="true">First + Second</button>
+                  <button type="button" class="bus-stage-option combo" data-bus-addon-preset="second,last" aria-pressed="false">Second + Last</button>
+                  <button type="button" class="bus-stage-option combo" data-bus-addon-preset="first,second,last" aria-pressed="false">First + Second + Last</button>
                 </div>
               </fieldset>
               <label for="busAddOnNumberInput">Add-on bus number</label>
               <div class="bus-call-entry-row"><input id="busAddOnNumberInput" maxlength="18" inputmode="text" autocomplete="off" placeholder="Extra bus number" aria-label="Add-on bus number" /><button class="bus-call-send bus-addon-send" id="sendBusAddOn" type="button">Send Add-On • First Call + Second Call</button></div>
               <label class="bus-note-field">Optional note <input id="busAddOnNoteInput" maxlength="80" autocomplete="off" placeholder="Just arrived, front doors, loading now…" /></label>
-              <div class="bus-addon-actions"><button class="button ghost" id="cancelBusAddOn" type="button">Hide Add-On Buses</button></div>
+              <p class="bus-addon-layer-note">Add-on buses stay separate from the regular bus call, so the regular bus remains on classroom screens.</p>
+              <div class="bus-addon-actions"><button class="button ghost" id="clearBusAddOns" type="button">Clear active add-on buses</button><button class="button ghost" id="cancelBusAddOn" type="button">Hide Add-On Buses</button></div>
             </section>
             <div class="bus-caller-actions"><button class="button ghost" id="clearBusCall" type="button">Clear current call</button><button class="button ghost" id="leaveBusCaller" type="button">Leave caller mode</button><button class="button ghost" id="closeBusRoom" type="button">End session — keep code reserved</button></div>
             <p class="bus-call-status" id="busCallerStatus">Ready to call a bus.</p>
@@ -743,6 +747,7 @@ Fish = ညၣ်</textarea>
           <div class="bus-classroom-waiting">
             <div class="bus-waiting-icon" aria-hidden="true">🚌</div><p class="eyebrow">BUS CALLS ARE ON</p><h3 id="busWaitingTitle">Waiting for the next bus</h3><p id="busWaitingDetail">A large alert will appear on this screen when the caller sends a bus number.</p>
             <div class="bus-board-current" aria-live="polite" aria-atomic="true"><span id="busBoardLabel">WAITING FOR THE NEXT BUS</span><strong id="busBoardNumber">—</strong></div>
+            <section class="bus-active-addons" id="busActiveAddOns" hidden aria-live="polite" aria-label="Active add-on buses"><div class="bus-active-addons-heading"><span>ADD-ON BUSES</span><strong>Also active</strong></div><div class="bus-active-addon-list" id="busActiveAddOnList"></div></section>
             <div class="bus-classroom-options"><label class="bus-sound-toggle"><input id="busSoundEnabled" type="checkbox" checked /><span>Play alert sound</span></label><button class="button ghost" id="testBusAlert" type="button">Test popup</button><button class="button ghost" id="leaveBusRoom" type="button">Leave room</button></div>
           </div>
         </section>
@@ -757,6 +762,7 @@ Fish = ညၣ်</textarea>
           <div class="bus-popup-label">BUS</div>
           <strong id="busPopupNumber">—</strong>
           <p id="busPopupNote" hidden></p>
+          <div class="bus-popup-regular-context" id="busPopupRegularContext" hidden></div>
           <time id="busPopupTime">Called just now</time>
           <button class="bus-popup-dismiss" id="dismissBusPopupMain" type="button">Dismiss</button>
         </div>

@@ -4,9 +4,9 @@
   const panel=q('#busCallPanel');
   if(!panel)return;
   const connection=q('#busCallConnection'),setup=q('#busCallSetup'),callerConsole=q('#busCallerConsole'),teacherConsole=q('#busClassroomConsole'),errorEl=q('#busCallError');
-  const popup=q('#busCallPopup'),popupNumber=q('#busPopupNumber'),popupNote=q('#busPopupNote'),popupTime=q('#busPopupTime'),popupStage=q('#busPopupStage');
+  const popup=q('#busCallPopup'),popupNumber=q('#busPopupNumber'),popupNote=q('#busPopupNote'),popupTime=q('#busPopupTime'),popupStage=q('#busPopupStage'),popupRegularContext=q('#busPopupRegularContext');
   let busDb=null,busUser=null,callerAuth=null,callerDatabase=null,googleCallerAuth=null,googleCallerDatabase=null;
-  let role='',code='',room=null,unsubscribe=null,presenceDisconnect=null,lastCallId='',audioContext=null,selectedStage='first',callerCodeEditing=false;
+  let role='',code='',room=null,unsubscribe=null,presenceDisconnect=null,lastCallId='',seenAddOnIds=new Set(),audioContext=null,selectedStage='first',callerCodeEditing=false;
   const teacherSetup=q('#busTeacherSetup');
   const roleTabs=Array.from(panel.querySelectorAll('[data-bus-role]'));
   let fullscreenActive=false,fullscreenHome=null,popupHome=null,fullscreenFocus=null;
@@ -118,7 +118,7 @@
   }
   function stopWatch(){if(unsubscribe){unsubscribe();unsubscribe=null}}
   async function stopPresence(remove=true){if(presenceDisconnect){try{await presenceDisconnect.cancel()}catch{}presenceDisconnect=null}if(remove&&role==='teacher'&&code&&busUser&&fb){try{await fb.remove(listenerRef(code,busUser.uid))}catch{}}}
-  function resetUi(){if(fullscreenActive)exitBusFullscreen();setup.hidden=false;callerConsole.hidden=true;teacherConsole.hidden=true;popup.hidden=true;const addOnPanel=q('#busAddOnPanel');if(addOnPanel)addOnPanel.hidden=true;const addOnToggle=q('#toggleBusAddOn');if(addOnToggle){addOnToggle.setAttribute('aria-expanded','false');addOnToggle.textContent='＋ Add-On Buses'}role='';code='';room=null;lastCallId='';setConnection('Not connected');setError('');updateRoleTabs()}
+  function resetUi(){if(fullscreenActive)exitBusFullscreen();setup.hidden=false;callerConsole.hidden=true;teacherConsole.hidden=true;popup.hidden=true;const activeAddOns=q('#busActiveAddOns');if(activeAddOns)activeAddOns.hidden=true;const addOnPanel=q('#busAddOnPanel');if(addOnPanel)addOnPanel.hidden=true;const addOnToggle=q('#toggleBusAddOn');if(addOnToggle){addOnToggle.setAttribute('aria-expanded','false');addOnToggle.textContent='＋ Add-On Buses'}role='';code='';room=null;lastCallId='';seenAddOnIds=new Set();setConnection('Not connected');setError('');updateRoleTabs()}
   function renderHistory(history={}){
     const list=q('#busCallHistory');
     const items=Object.values(history||{}).filter(Boolean).sort((a,b)=>(b.calledAt||0)-(a.calledAt||0)).slice(0,20);
@@ -135,19 +135,38 @@
       row.append(bus,detail,time);list.append(row)
     })
   }
+  function activeAddOnCalls(value){
+    return Object.values(value?.addOnCalls||{}).filter(Boolean).sort((a,b)=>(a.calledAt||0)-(b.calledAt||0));
+  }
+  function renderActiveAddOns(value){
+    const wrap=q('#busActiveAddOns'),list=q('#busActiveAddOnList');
+    if(!wrap||!list)return;
+    const items=activeAddOnCalls(value);
+    wrap.hidden=!items.length;list.innerHTML='';
+    items.forEach(item=>{
+      const row=document.createElement('div');row.className='bus-active-addon-row';
+      const number=document.createElement('strong');number.textContent=cleanText(item.number,18)||'—';
+      const meta=document.createElement('div');meta.className='bus-active-addon-meta';
+      callStagesFor(item).forEach(stageName=>{const tag=document.createElement('span');tag.textContent=callStageLabel(stageName);meta.append(tag)});
+      if(item.note){const note=document.createElement('em');note.textContent=item.note;meta.append(note)}
+      const time=document.createElement('time');time.textContent=formatTime(item.calledAt);
+      row.append(number,meta,time);list.append(row);
+    });
+  }
   function renderCaller(value){
     const activeAt=lastCallerActivity(value);
     q('#busCodeReservation').textContent=activeAt?`Code reserved until ${new Date(activeAt+RESERVATION_MS).toLocaleDateString()}. Using caller controls renews it for 30 days.`:'This code is reserved for its caller.';
     const listeners=Object.values(value.players||{}).filter(item=>item?.connected!==false);
     q('#busListenerCount').textContent=`${listeners.length} classroom${listeners.length===1?'':'s'} online`;
     renderHistory(value.history);
+    const addOns=activeAddOnCalls(value),suffix=addOns.length?` • ${addOns.length} add-on bus${addOns.length===1?'':'es'} also active.`:'';
     if(value.currentCall){
       const current=value.currentCall;
-      q('#busCallerStatus').textContent=current.isAddOn?`Add-On Bus ${current.number} — ${callStagesLabel(current)} sent at ${formatTime(current.calledAt)}.`:`${callStagesLabel(current)} for Bus ${current.number} was sent at ${formatTime(current.calledAt)}.`
-    }else q('#busCallerStatus').textContent='Ready to call a bus.'
+      q('#busCallerStatus').textContent=`${callStagesLabel(current)} for Bus ${current.number} was sent at ${formatTime(current.calledAt)}.${suffix}`
+    }else q('#busCallerStatus').textContent=addOns.length?`${addOns.length} add-on bus${addOns.length===1?' is':'es are'} active. Ready for a regular bus call.`:'Ready to call a bus.'
   }
   function beep(){if(!q('#busSoundEnabled').checked)return;try{audioContext=audioContext||new (window.AudioContext||window.webkitAudioContext)();if(audioContext.state==='suspended')audioContext.resume();const now=audioContext.currentTime;[0,.18].forEach((delay,index)=>{const osc=audioContext.createOscillator(),gain=audioContext.createGain();osc.type='sine';osc.frequency.value=index?880:660;gain.gain.setValueAtTime(.0001,now+delay);gain.gain.exponentialRampToValueAtTime(.18,now+delay+.015);gain.gain.exponentialRampToValueAtTime(.0001,now+delay+.16);osc.connect(gain).connect(audioContext.destination);osc.start(now+delay);osc.stop(now+delay+.18)})}catch{}}
-  function showPopup(call,{test=false}={}){
+  function showPopup(call,{test=false,regularCall=null}={}){
     if(!call)return;
     const stages=callStagesFor(call),stageText=stageListLabel(stages),primary=stages[0]||'first';
     const heading=q('#busPopupHeading');if(heading)heading.textContent=call.isAddOn?'🚌 ADD-ON BUS':'🚌 BUS CALL';
@@ -155,21 +174,45 @@
     popupStage.className=`bus-popup-stage ${call.isAddOn?'addon':callStageClass(primary)}`;
     popupNumber.textContent=cleanText(call.number,18)||'123';popupNumber.style.setProperty('--bus-digits',Math.max(3,popupNumber.textContent.length));
     const note=cleanText(call.note,80);popupNote.textContent=note;popupNote.hidden=!note;
+    if(popupRegularContext){
+      if(call.isAddOn&&regularCall){popupRegularContext.textContent=`Regular call stays active: ${callStagesLabel(regularCall)} • Bus ${cleanText(regularCall.number,18)}`;popupRegularContext.hidden=false}
+      else popupRegularContext.hidden=true;
+    }
     popupTime.textContent=test?'Test alert':`${call.isAddOn?'Add-On • ':''}${stageText} • Called at ${formatTime(call.calledAt)}`;
     popup.hidden=false;if(!test)beep()
   }
   function renderTeacher(value){
-    const latest=value.currentCall;
-    q('#busBoardNumber').textContent=latest?cleanText(latest.number,18):'—';
-    q('#busBoardLabel').textContent=latest?`${latest.isAddOn?'ADD-ON BUS • ':''}${callStagesLabel(latest).toUpperCase()} • LATEST BUS`:'WAITING FOR THE NEXT BUS';
-    q('#busBoardNumber').style.setProperty('--bus-digits',Math.max(3,String(latest?.number||'').length));
+    const regular=value.currentCall||null,addOns=activeAddOnCalls(value);
+    q('#busBoardNumber').textContent=regular?cleanText(regular.number,18):'—';
+    q('#busBoardLabel').textContent=regular?`${callStagesLabel(regular).toUpperCase()} • REGULAR BUS`:'WAITING FOR THE NEXT REGULAR BUS';
+    q('#busBoardNumber').style.setProperty('--bus-digits',Math.max(3,String(regular?.number||'').length));
     q('#busTeacherConnectionText').textContent='Connected';
-    const call=value.currentCall;
-    if(!call){popup.hidden=true;q('#busWaitingTitle').textContent='Waiting for the next bus';q('#busWaitingDetail').textContent='A large alert will appear on this screen when the caller sends a bus number.';return}
-    if(String(call.id)!==lastCallId){
-      lastCallId=String(call.id);showPopup(call);
-      q('#busWaitingTitle').textContent=call.isAddOn?`Add-On Bus ${call.number}: ${callStagesLabel(call)}`:`${callStagesLabel(call)}: Bus ${call.number}`;
-      q('#busWaitingDetail').textContent=`Called at ${formatTime(call.calledAt)}${call.note?` • ${call.note}`:''}`
+    renderActiveAddOns(value);
+
+    const unseenAddOns=addOns.filter(call=>!seenAddOnIds.has(String(call.id)));
+    addOns.forEach(call=>seenAddOnIds.add(String(call.id)));
+    const regularIsNew=regular&&String(regular.id)!==lastCallId;
+    if(regularIsNew)lastCallId=String(regular.id);
+
+    // Prefer a newly arrived add-on popup because it is the exceptional event.
+    // The regular bus remains visible on the classroom board underneath it.
+    if(unseenAddOns.length){
+      const newest=unseenAddOns[unseenAddOns.length-1];
+      showPopup(newest,{regularCall:regular});
+    }else if(regularIsNew){
+      showPopup(regular);
+    }
+
+    if(regular){
+      q('#busWaitingTitle').textContent=`${callStagesLabel(regular)}: Bus ${regular.number}`;
+      q('#busWaitingDetail').textContent=`Regular bus called at ${formatTime(regular.calledAt)}${regular.note?` • ${regular.note}`:''}${addOns.length?` • ${addOns.length} add-on bus${addOns.length===1?'':'es'} also active.`:''}`;
+    }else if(addOns.length){
+      q('#busWaitingTitle').textContent=`${addOns.length} add-on bus${addOns.length===1?'':'es'} active`;
+      q('#busWaitingDetail').textContent='The regular bus call is clear. Add-on buses remain listed below.';
+    }else{
+      popup.hidden=true;
+      q('#busWaitingTitle').textContent='Waiting for the next bus';
+      q('#busWaitingDetail').textContent='A large alert will appear on this screen when the caller sends a bus number.';
     }
   }
   function watchRoom(){stopWatch();unsubscribe=fb.onValue(roomRef(code),snap=>{if(!snap.exists()){setError('This Bus Call room was closed or no longer exists.');setConnection('Room closed','problem');q('#busBoardNumber').textContent='—';q('#busBoardLabel').textContent='ROOM CLOSED';stopPresence(false);stopWatch();popup.hidden=true;return}room=snap.val()||{};if(role==='caller'&&room.hostUid!==busUser.uid){stopWatch();resetUi();setError('This code now belongs to another caller. Choose a different code.');return}if(room.status==='closed'){popup.hidden=true;q('#busBoardNumber').textContent='—';q('#busBoardLabel').textContent='ROOM CLOSED';setConnection('Room closed');if(role==='teacher'){q('#busWaitingTitle').textContent='Room closed';q('#busWaitingDetail').textContent='The caller ended this session. Leave and join again when it reopens.';stopPresence(false);stopWatch()}return}if(room.expiresAt&&room.expiresAt<Date.now()){setError('This Bus Call room has expired. Start or join a new room.');setConnection('Room expired','problem');popup.hidden=true;q('#busBoardNumber').textContent='—';q('#busBoardLabel').textContent='ROOM EXPIRED';return}setConnection(role==='caller'?'Caller online':'Listening','online');if(role==='caller')renderCaller(room);else renderTeacher(room)},err=>{setConnection('Connection problem','problem');setError(err?.message||'Could not stay connected to the Bus Call room.')})}
@@ -269,19 +312,25 @@
       setError(callerAuthError(error,method));
     }finally{buttons.forEach(button=>button.disabled=false)}
   }
-  async function joinTeacherRoom(){setError('');const requested=normalizeCode(q('#busTeacherCodeInput').value),name=cleanText(q('#busTeacherNameInput').value,32)||'Classroom';try{if(requested.length<4)throw new Error('Enter the shared Bus Call room code.');await ensureFirebase();const snap=await fb.get(roomRef(requested));if(!snap.exists())throw new Error('Bus Call room not found. Check the room code.');const value=snap.val();if(value.status==='closed'||(value.expiresAt&&value.expiresAt<Date.now()))throw new Error('This Bus Call room is no longer active.');role='teacher';selectRole('teacher');updateRoleTabs();code=requested;lastCallId='';setup.hidden=true;callerConsole.hidden=true;teacherConsole.hidden=false;q('#busTeacherRoomCode').textContent=code;q('#busTeacherCodeInput').value=code;saveTeacherPrefs();const ref=listenerRef(code,busUser.uid);await fb.set(ref,{id:busUser.uid,name,connected:true,joinedAt:Date.now(),lastSeen:Date.now()});presenceDisconnect=fb.onDisconnect(ref);await presenceDisconnect.remove();watchRoom()}catch(error){setConnection('Could not join','problem');setError(friendlyError(error))}}
+  async function joinTeacherRoom(){setError('');const requested=normalizeCode(q('#busTeacherCodeInput').value),name=cleanText(q('#busTeacherNameInput').value,32)||'Classroom';try{if(requested.length<4)throw new Error('Enter the shared Bus Call room code.');await ensureFirebase();const snap=await fb.get(roomRef(requested));if(!snap.exists())throw new Error('Bus Call room not found. Check the room code.');const value=snap.val();if(value.status==='closed'||(value.expiresAt&&value.expiresAt<Date.now()))throw new Error('This Bus Call room is no longer active.');role='teacher';selectRole('teacher');updateRoleTabs();code=requested;lastCallId='';seenAddOnIds=new Set();setup.hidden=true;callerConsole.hidden=true;teacherConsole.hidden=false;q('#busTeacherRoomCode').textContent=code;q('#busTeacherCodeInput').value=code;saveTeacherPrefs();const ref=listenerRef(code,busUser.uid);await fb.set(ref,{id:busUser.uid,name,connected:true,joinedAt:Date.now(),lastSeen:Date.now()});presenceDisconnect=fb.onDisconnect(ref);await presenceDisconnect.remove();watchRoom()}catch(error){setConnection('Could not join','problem');setError(friendlyError(error))}}
   async function sendCall(){if(role!=='caller'||!code)return;const number=cleanText(q('#busNumberInput').value,18),note=cleanText(q('#busCallNoteInput').value,80),sentStage=selectedStage;if(!number){setError('Enter a bus number first.');q('#busNumberInput').focus();return}setError('');const button=q('#sendBusCall');button.disabled=true;try{const id=`${Date.now()}-${Math.random().toString(36).slice(2,7)}`,call={id,number,note,stage:sentStage,calledAt:fb.serverTimestamp()};const historyKey=fb.push(fb.ref(busDb,`quizRooms/${roomKey(code)}/history`)).key;await fb.update(roomRef(code),{currentCall:call,[`history/${historyKey}`]:call,lastActivityAt:fb.serverTimestamp(),callerLastActiveAt:fb.serverTimestamp()});q('#busCallNoteInput').value='';if(sentStage==='first')setCallStage('second');else if(sentStage==='second')setCallStage('last');q('#busNumberInput').focus();q('#busNumberInput').select()}catch(error){setError(friendlyError(error))}finally{button.disabled=false}}
-  function getAddOnStages(){return callStageOrder.filter(stage=>q(`[data-bus-addon-stage="${stage}"]`)?.classList.contains('active'))}
-  function setAddOnStages(stages){
-    const selected=new Set(normalizeStageList(stages));
-    panel.querySelectorAll('[data-bus-addon-stage]').forEach(button=>{const active=selected.has(button.dataset.busAddonStage);button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active))});
-    const send=q('#sendBusAddOn');if(send){const chosen=getAddOnStages();send.textContent=chosen.length?`Send Add-On • ${stageListLabel(chosen)}`:'Choose a call type'}
+  function getAddOnStages(){
+    const button=panel.querySelector('[data-bus-addon-preset].active');
+    return normalizeStageList(button?.dataset.busAddonPreset?.split(',')||[])
   }
-  function toggleAddOnStage(stage){
-    const button=q(`[data-bus-addon-stage="${stage}"]`);if(!button)return;
-    const current=getAddOnStages();
-    if(button.classList.contains('active')&&current.length===1){setError('Keep at least one call type selected for an add-on bus.');return}
-    button.classList.toggle('active');button.setAttribute('aria-pressed',String(button.classList.contains('active')));setError('');setAddOnStages(getAddOnStages())
+  function setAddOnStages(stages){
+    const normalized=normalizeStageList(stages),key=normalized.join(',');
+    let matched=false;
+    panel.querySelectorAll('[data-bus-addon-preset]').forEach(button=>{
+      const active=button.dataset.busAddonPreset===key;
+      button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));
+      if(active)matched=true
+    });
+    if(!matched&&key!=='first,second')return setAddOnStages(['first','second']);
+    const send=q('#sendBusAddOn');if(send){const chosen=getAddOnStages();send.textContent=chosen.length?`Send Add-On • ${stageListLabel(chosen)}`:'Choose a call option'}
+  }
+  function selectAddOnPreset(preset){
+    setError('');setAddOnStages(String(preset||'').split(','))
   }
   function setAddOnPanel(open){
     const addOn=q('#busAddOnPanel'),toggle=q('#toggleBusAddOn');if(!addOn||!toggle)return;
@@ -298,11 +347,12 @@
       const id=`${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
       const call={id,number,note,stage:stages[0],stages,isAddOn:true,calledAt:fb.serverTimestamp()};
       const historyKey=fb.push(fb.ref(busDb,`quizRooms/${roomKey(code)}/history`)).key;
-      await fb.update(roomRef(code),{currentCall:call,[`history/${historyKey}`]:call,lastActivityAt:fb.serverTimestamp(),callerLastActiveAt:fb.serverTimestamp()});
+      await fb.update(roomRef(code),{[`addOnCalls/${id}`]:call,[`history/${historyKey}`]:call,lastActivityAt:fb.serverTimestamp(),callerLastActiveAt:fb.serverTimestamp()});
       q('#busAddOnNoteInput').value='';q('#busAddOnNumberInput').focus();q('#busAddOnNumberInput').select()
     }catch(error){setError(friendlyError(error))}finally{button.disabled=false}
   }
-  async function clearCurrent(){if(role!=='caller'||!code)return;try{await fb.update(roomRef(code),{currentCall:null,lastActivityAt:fb.serverTimestamp(),callerLastActiveAt:fb.serverTimestamp()});q('#busCallerStatus').textContent='Current call cleared.'}catch(error){setError(friendlyError(error))}}
+  async function clearCurrent(){if(role!=='caller'||!code)return;try{await fb.update(roomRef(code),{currentCall:null,lastActivityAt:fb.serverTimestamp(),callerLastActiveAt:fb.serverTimestamp()});q('#busCallerStatus').textContent=activeAddOnCalls(room).length?'Regular call cleared. Active add-on buses stay on.':'Regular call cleared.'}catch(error){setError(friendlyError(error))}}
+  async function clearAddOns(){if(role!=='caller'||!code)return;const count=activeAddOnCalls(room).length;if(!count){q('#busCallerStatus').textContent='No active add-on buses to clear.';return}if(!confirm(`Clear ${count} active add-on bus${count===1?'':'es'}? The regular bus call will stay on.`))return;try{await fb.update(roomRef(code),{addOnCalls:null,lastActivityAt:fb.serverTimestamp(),callerLastActiveAt:fb.serverTimestamp()});q('#busCallerStatus').textContent='Active add-on buses cleared. Regular call stays on.'}catch(error){setError(friendlyError(error))}}
   async function clearHistory(){if(role!=='caller'||!code||!confirm('Clear the recent Bus Call history for this room?'))return;try{await fb.update(roomRef(code),{history:null,callerLastActiveAt:fb.serverTimestamp()})}catch(error){setError(friendlyError(error))}}
   async function changeRoomCode(){
     if(role!=='caller'||!code||q('#changeBusRoomCode').disabled||q('#connectBusGoogle').disabled||q('#sendBusCall').disabled)return;
@@ -330,7 +380,7 @@
       if(!result.committed)throw new Error('That code is already reserved. Your current code has not changed.');
       claimed=true;
       // Retain the old reservation and its history; never delete the old room record.
-      await fb.update(roomRef(previous),{status:'closed',currentCall:null,players:null,closedAt:fb.serverTimestamp()});
+      await fb.update(roomRef(previous),{status:'closed',currentCall:null,addOnCalls:null,players:null,closedAt:fb.serverTimestamp()});
       stopWatch();code=selected;
       q('#busCallerRoomCode').textContent=code;q('#busCallerCodeInput').value=code;
       q('#busNumberInput').value='';q('#busCallNoteInput').value='';q('#busAddOnNumberInput').value='';q('#busAddOnNoteInput').value='';setAddOnStages(['first','second']);setAddOnPanel(false);
@@ -343,7 +393,7 @@
   async function closeRoom(){
     if(role!=='caller'||!code||!confirm(`Close room ${code}? Calls will be cleared. Your code stays reserved for 30 days.`))return;
     try{
-      await fb.update(roomRef(code),{status:'closed',currentCall:null,history:null,players:null,closedAt:fb.serverTimestamp(),callerLastActiveAt:fb.serverTimestamp()});
+      await fb.update(roomRef(code),{status:'closed',currentCall:null,addOnCalls:null,history:null,players:null,closedAt:fb.serverTimestamp(),callerLastActiveAt:fb.serverTimestamp()});
       stopWatch();resetUi();
     }catch(error){setError(friendlyError(error))}
   }
@@ -354,9 +404,10 @@
   q('#startBusGoogle').addEventListener('click',()=>createCallerRoom('google'));q('#connectBusGoogle').addEventListener('click',connectCallerGoogle);q('#startBusCaller').addEventListener('click',()=>createCallerRoom('pin'));q('#joinBusRoom').addEventListener('click',joinTeacherRoom);q('#sendBusCall').addEventListener('click',sendCall);q('#busNumberInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sendCall()}});q('#clearBusCall').addEventListener('click',clearCurrent);q('#clearBusHistory').addEventListener('click',clearHistory);q('#closeBusRoom').addEventListener('click',closeRoom);q('#leaveBusRoom').addEventListener('click',leaveRoom);q('#copyBusRoomCode').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(code);showToast('Bus Call room code copied')}catch{showToast(`Room code: ${code}`)}});q('#dismissBusPopup').addEventListener('click',()=>popup.hidden=true);q('#dismissBusPopupMain').addEventListener('click',()=>popup.hidden=true);q('#testBusAlert').addEventListener('click',()=>{try{audioContext=audioContext||new (window.AudioContext||window.webkitAudioContext)()}catch{}beep();showPopup({number:'123',note:'This is a test alert.',stage:selectedStage,calledAt:Date.now()},{test:true})});q('#busSoundEnabled').addEventListener('change',saveTeacherPrefs);
   q('#toggleBusAddOn').addEventListener('click',()=>setAddOnPanel(q('#busAddOnPanel').hidden));
   q('#cancelBusAddOn').addEventListener('click',()=>setAddOnPanel(false));
+  q('#clearBusAddOns').addEventListener('click',clearAddOns);
   q('#sendBusAddOn').addEventListener('click',sendAddOnCall);
   q('#busAddOnNumberInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sendAddOnCall()}});
-  panel.querySelectorAll('[data-bus-addon-stage]').forEach(button=>button.addEventListener('click',()=>toggleAddOnStage(button.dataset.busAddonStage)));
+  panel.querySelectorAll('[data-bus-addon-preset]').forEach(button=>button.addEventListener('click',()=>selectAddOnPreset(button.dataset.busAddonPreset)));
   panel.querySelectorAll('[data-bus-call-stage]').forEach(button=>button.addEventListener('click',()=>setCallStage(button.dataset.busCallStage)));
   ['#busCallerCodeInput','#busTeacherCodeInput'].forEach(sel=>q(sel).addEventListener('input',e=>{const pos=e.target.selectionStart;e.target.value=normalizeCode(e.target.value);try{e.target.setSelectionRange(pos,pos)}catch{}}));
   window.addEventListener('beforeunload',()=>{if(role==='teacher'&&code&&busUser&&fb){try{fb.update(listenerRef(code,busUser.uid),{connected:false,lastSeen:Date.now()})}catch{}}});
