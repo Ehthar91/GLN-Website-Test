@@ -8,6 +8,7 @@
   let busDb=null,busUser=null,callerAuth=null,callerDatabase=null,googleCallerAuth=null,googleCallerDatabase=null;
   let role='',code='',room=null,unsubscribe=null,presenceDisconnect=null,lastCallId='',seenAddOnIds=new Set(),audioContext=null,selectedStage='first',callerCodeEditing=false;
   let callerDisconnect=null,callerHeartbeatTimer=null,sessionExpiryTimer=null,historyPruneBusy=false;
+  let teacherDisplayName='',teacherPresenceAttached=false;
   const teacherSetup=q('#busTeacherSetup');
   const roleTabs=Array.from(panel.querySelectorAll('[data-bus-role]'));
   let fullscreenActive=false,fullscreenHome=null,popupHome=null,fullscreenFocus=null;
@@ -163,13 +164,19 @@
     if(callerDisconnect){try{await callerDisconnect.cancel()}catch{}callerDisconnect=null}
     if(markDisconnected&&role==='caller'&&code&&busUser&&fb){try{await fb.update(roomRef(code),{callerDisconnectedAt:fb.serverTimestamp(),sessionExpiresAt:Date.now()+SESSION_IDLE_MS,callerLastActiveAt:fb.serverTimestamp()})}catch{}}
   }
+  function renderTeacherWaiting(detail='The caller has not started the dismissal room yet. Keep this screen open and it will connect automatically when the caller comes online.'){
+    clearSessionExpiryTimer();popup.hidden=true;q('#busBoardNumber').textContent='—';q('#busBoardLabel').textContent='WAITING FOR CALLER';
+    q('#busTeacherConnectionText').textContent='Waiting for caller';setConnection('Waiting for caller');
+    const activeAddOns=q('#busActiveAddOns');if(activeAddOns)activeAddOns.hidden=true;
+    q('#busWaitingTitle').textContent='Waiting for the caller…';q('#busWaitingDetail').textContent=detail;
+  }
   function expireSessionUi(){
-    clearSessionExpiryTimer();popup.hidden=true;q('#busBoardNumber').textContent='—';q('#busBoardLabel').textContent='SESSION ENDED';setConnection('Session ended');
+    clearSessionExpiryTimer();
     if(role==='teacher'){
-      q('#busWaitingTitle').textContent='Bus Call session ended';
-      q('#busWaitingDetail').textContent='The caller has been offline for an hour. Ask the caller to reopen the room for today’s dismissal.';
-      stopPresence(true);stopWatch();
+      stopPresence(true).catch(()=>{});
+      renderTeacherWaiting('The previous live session ended after the caller was offline for an hour. You can stay here — this screen will reconnect automatically when the caller starts today’s dismissal.');
     }else if(role==='caller'){
+      popup.hidden=true;q('#busBoardNumber').textContent='—';q('#busBoardLabel').textContent='SESSION ENDED';setConnection('Session ended');
       clearCallerHeartbeat();
       setError('This caller session expired after one hour without an active caller connection. Reopen the room to start a fresh session.');
       stopWatch();
@@ -182,7 +189,7 @@
     sessionExpiryTimer=setTimeout(()=>{if(room&&sessionExpired(room))expireSessionUi()},Math.min(remaining+100,2147483000));
     return false;
   }
-  function resetUi(){if(fullscreenActive)exitBusFullscreen();clearCallerHeartbeat();clearSessionExpiryTimer();if(callerDisconnect){try{callerDisconnect.cancel().catch(()=>{})}catch{}callerDisconnect=null}setup.hidden=false;callerConsole.hidden=true;teacherConsole.hidden=true;popup.hidden=true;const activeAddOns=q('#busActiveAddOns');if(activeAddOns)activeAddOns.hidden=true;const addOnPanel=q('#busAddOnPanel');if(addOnPanel)addOnPanel.hidden=true;const addOnToggle=q('#toggleBusAddOn');if(addOnToggle){addOnToggle.setAttribute('aria-expanded','false');addOnToggle.textContent='＋ Add-On Buses'}role='';code='';room=null;lastCallId='';seenAddOnIds=new Set();setConnection('Not connected');setError('');updateRoleTabs()}
+  function resetUi(){if(fullscreenActive)exitBusFullscreen();clearCallerHeartbeat();clearSessionExpiryTimer();if(callerDisconnect){try{callerDisconnect.cancel().catch(()=>{})}catch{}callerDisconnect=null}setup.hidden=false;callerConsole.hidden=true;teacherConsole.hidden=true;popup.hidden=true;const activeAddOns=q('#busActiveAddOns');if(activeAddOns)activeAddOns.hidden=true;const addOnPanel=q('#busAddOnPanel');if(addOnPanel)addOnPanel.hidden=true;const addOnToggle=q('#toggleBusAddOn');if(addOnToggle){addOnToggle.setAttribute('aria-expanded','false');addOnToggle.textContent='＋ Add-On Buses'}role='';code='';room=null;teacherDisplayName='';teacherPresenceAttached=false;lastCallId='';seenAddOnIds=new Set();setConnection('Not connected');setError('');updateRoleTabs()}
   function renderHistory(history={}){
     const list=q('#busCallHistory');
     const cutoff=Date.now()-HISTORY_RETENTION_MS;
@@ -280,7 +287,33 @@
       q('#busWaitingDetail').textContent='A large alert will appear on this screen when the caller sends a bus number.';
     }
   }
-  function watchRoom(){stopWatch();unsubscribe=fb.onValue(roomRef(code),snap=>{if(!snap.exists()){setError('This Bus Call room was closed or no longer exists.');setConnection('Room closed','problem');q('#busBoardNumber').textContent='—';q('#busBoardLabel').textContent='ROOM CLOSED';stopPresence(false);stopWatch();popup.hidden=true;return}room=snap.val()||{};if(role==='caller'&&room.hostUid!==busUser.uid){stopWatch();resetUi();setError('This code now belongs to another caller. Choose a different code.');return}if(room.status==='closed'){popup.hidden=true;q('#busBoardNumber').textContent='—';q('#busBoardLabel').textContent='ROOM CLOSED';setConnection('Room closed');if(role==='teacher'){q('#busWaitingTitle').textContent='Room closed';q('#busWaitingDetail').textContent='The caller ended this session. Leave and join again when it reopens.';stopPresence(false);stopWatch()}return}if(room.expiresAt&&room.expiresAt<Date.now()){setError('This Bus Call room has expired. Start or join a new room.');setConnection('Room expired','problem');popup.hidden=true;q('#busBoardNumber').textContent='—';q('#busBoardLabel').textContent='ROOM EXPIRED';return}if(sessionExpired(room)){expireSessionUi();return}scheduleSessionExpiry(room);setConnection(role==='caller'?'Caller online':'Listening','online');if(role==='caller')renderCaller(room);else renderTeacher(room)},err=>{setConnection('Connection problem','problem');setError(err?.message||'Could not stay connected to the Bus Call room.')})}
+  function watchRoom(){
+    stopWatch();
+    unsubscribe=fb.onValue(roomRef(code),snap=>{
+      if(!snap.exists()){
+        room=null;
+        if(role==='teacher'){
+          stopPresence(false).catch(()=>{});setError('');
+          renderTeacherWaiting('This room is not live yet. Keep this screen open and it will connect automatically as soon as the caller starts this room.');
+          return;
+        }
+        setError('This Bus Call room was closed or no longer exists.');setConnection('Room closed','problem');q('#busBoardNumber').textContent='—';q('#busBoardLabel').textContent='ROOM CLOSED';stopWatch();popup.hidden=true;return;
+      }
+      room=snap.val()||{};
+      if(role==='caller'&&room.hostUid!==busUser.uid){stopWatch();resetUi();setError('This code now belongs to another caller. Choose a different code.');return}
+      const inactive=room.status==='closed'||(room.expiresAt&&room.expiresAt<Date.now())||sessionExpired(room);
+      if(inactive&&role==='teacher'){
+        stopPresence(true).catch(()=>{});setError('');
+        renderTeacherWaiting(room.status==='closed'?'The caller has not started today’s dismissal yet. Keep this screen open and it will reconnect automatically when the caller reopens the room.':'The previous live session is no longer active. Keep this screen open and it will reconnect automatically when the caller starts today’s dismissal.');
+        return;
+      }
+      if(room.status==='closed'){popup.hidden=true;q('#busBoardNumber').textContent='—';q('#busBoardLabel').textContent='ROOM CLOSED';setConnection('Room closed');return}
+      if(room.expiresAt&&room.expiresAt<Date.now()){setError('This Bus Call room has expired. Start or join a new room.');setConnection('Room expired','problem');popup.hidden=true;q('#busBoardNumber').textContent='—';q('#busBoardLabel').textContent='ROOM EXPIRED';return}
+      if(sessionExpired(room)){expireSessionUi();return}
+      scheduleSessionExpiry(room);setConnection(role==='caller'?'Caller online':'Listening','online');
+      if(role==='caller')renderCaller(room);else{ensureTeacherPresence().catch(error=>setError(friendlyError(error)));renderTeacher(room)}
+    },err=>{setConnection('Connection problem','problem');setError(err?.message||'Could not stay connected to the Bus Call room.')})
+  }
   async function ensureFirebase(){setConnection('Connecting…');await initRaceFirebase();busDb=db;busUser=currentUser;setConnection('Connected','online')}
   async function callerIdentity(roomCode,pin,canCreate,accountKey=roomCode.toLowerCase()){
     if(!callerAuth){
@@ -377,7 +410,16 @@
       setError(callerAuthError(error,method));
     }finally{buttons.forEach(button=>button.disabled=false)}
   }
-  async function joinTeacherRoom(){setError('');const requested=normalizeCode(q('#busTeacherCodeInput').value),name=cleanText(q('#busTeacherNameInput').value,32)||'Classroom';try{if(requested.length<4)throw new Error('Enter the shared Bus Call room code.');await ensureFirebase();const snap=await fb.get(roomRef(requested));if(!snap.exists())throw new Error('Bus Call room not found. Check the room code.');const value=snap.val();if(value.status==='closed'||(value.expiresAt&&value.expiresAt<Date.now()))throw new Error('This Bus Call room is no longer active.');if(sessionExpired(value))throw new Error('This Bus Call session ended after the caller was offline for one hour. Ask the caller to reopen the room for today’s dismissal.');role='teacher';selectRole('teacher');updateRoleTabs();code=requested;lastCallId='';seenAddOnIds=new Set();setup.hidden=true;callerConsole.hidden=true;teacherConsole.hidden=false;q('#busTeacherRoomCode').textContent=code;q('#busTeacherCodeInput').value=code;saveTeacherPrefs();const ref=listenerRef(code,busUser.uid);await fb.set(ref,{id:busUser.uid,name,connected:true,joinedAt:Date.now(),lastSeen:Date.now()});presenceDisconnect=fb.onDisconnect(ref);await presenceDisconnect.remove();watchRoom()}catch(error){setConnection('Could not join','problem');setError(friendlyError(error))}}
+  async function joinTeacherRoom(){
+    setError('');const requested=normalizeCode(q('#busTeacherCodeInput').value),name=cleanText(q('#busTeacherNameInput').value,32)||'Classroom';
+    try{
+      if(requested.length<4)throw new Error('Enter the shared Bus Call room code.');
+      await ensureFirebase();
+      role='teacher';selectRole('teacher');updateRoleTabs();code=requested;teacherDisplayName=name;teacherPresenceAttached=false;lastCallId='';seenAddOnIds=new Set();
+      setup.hidden=true;callerConsole.hidden=true;teacherConsole.hidden=false;q('#busTeacherRoomCode').textContent=code;q('#busTeacherCodeInput').value=code;saveTeacherPrefs();
+      renderTeacherWaiting();watchRoom();
+    }catch(error){setConnection('Could not join','problem');setError(friendlyError(error))}
+  }
   async function sendCall(){if(role!=='caller'||!code)return;const number=cleanText(q('#busNumberInput').value,18),note=cleanText(q('#busCallNoteInput').value,80),sentStage=selectedStage;if(!number){setError('Enter a bus number first.');q('#busNumberInput').focus();return}setError('');const button=q('#sendBusCall');button.disabled=true;try{const id=`${Date.now()}-${Math.random().toString(36).slice(2,7)}`,call={id,number,note,stage:sentStage,calledAt:fb.serverTimestamp()};const historyKey=fb.push(fb.ref(busDb,`quizRooms/${roomKey(code)}/history`)).key;await fb.update(roomRef(code),{currentCall:call,[`history/${historyKey}`]:call,lastActivityAt:fb.serverTimestamp(),callerLastActiveAt:fb.serverTimestamp()});q('#busCallNoteInput').value='';if(sentStage==='first')setCallStage('second');else if(sentStage==='second')setCallStage('last');q('#busNumberInput').focus();q('#busNumberInput').select()}catch(error){setError(friendlyError(error))}finally{button.disabled=false}}
   function getAddOnStages(){
     const button=panel.querySelector('[data-bus-addon-preset].active');
