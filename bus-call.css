@@ -304,3 +304,21 @@ body.bus-fullscreen-open{overflow:hidden}
   grid-template-rows:repeat(var(--board-rows,1),minmax(0,1fr))!important;
   overflow:hidden!important;
 }
+
+
+/* Keep caller native/expanded fullscreen intact by using in-panel confirmations. */
+.bus-inline-confirm{position:fixed;inset:0;z-index:100004;display:grid;place-items:center;padding:20px;background:rgba(15,23,42,.72);backdrop-filter:blur(8px)}
+.bus-inline-confirm[hidden]{display:none!important}
+.bus-inline-confirm-card{width:min(520px,calc(100vw - 34px));box-sizing:border-box;padding:26px;border-radius:24px;background:#fff;color:#0f172a;text-align:center;box-shadow:0 30px 90px rgba(0,0,0,.42)}
+.bus-inline-confirm-icon{display:block;font-size:38px}.bus-inline-confirm-card h3{margin:8px 0 8px;font-size:26px}.bus-inline-confirm-card p{margin:0 auto;color:#475569;font-size:17px;font-weight:700;line-height:1.45}
+.bus-inline-confirm-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:22px}.bus-inline-confirm-actions .button{min-height:48px;font-size:16px;font-weight:900}
+@media(max-width:560px){.bus-inline-confirm-actions{grid-template-columns:1fr}}
+
+/* Full-screen teacher call-stage beacon: centered, large, and flashing without stealing tile space. */
+.bus-popup-status-row{position:relative!important;justify-content:center!important;min-height:clamp(48px,7vh,82px)!important;padding:0 clamp(78px,10vw,150px)!important}
+.bus-popup-stage.bus-stage-flash{margin:0!important;min-width:min(560px,62vw);max-width:72vw;padding:clamp(8px,1vh,14px) clamp(18px,2.3vw,34px)!important;border:3px solid currentColor;border-radius:18px!important;text-align:center;font-size:clamp(24px,4.2vw,64px)!important;font-weight:1000!important;line-height:1!important;letter-spacing:.09em!important;white-space:nowrap;box-shadow:0 0 0 0 currentColor;animation:busStageBeacon .82s ease-in-out infinite}
+.bus-popup-stage.bus-stage-flash.first{background:#dbeafe!important;color:#1d4ed8!important}.bus-popup-stage.bus-stage-flash.second{background:#fef3c7!important;color:#92400e!important}.bus-popup-stage.bus-stage-flash.last{background:#fee2e2!important;color:#b91c1c!important}
+.bus-popup-status-row time{position:absolute!important;right:0;top:50%;transform:translateY(-50%);max-width:clamp(70px,10vw,150px);overflow:hidden;text-overflow:ellipsis}
+@keyframes busStageBeacon{0%,100%{opacity:1;transform:scale(1);box-shadow:0 0 0 0 rgba(37,99,235,.25)}50%{opacity:.38;transform:scale(.97);box-shadow:0 0 0 10px rgba(37,99,235,0)}}
+@media(prefers-reduced-motion:reduce){.bus-popup-stage.bus-stage-flash{animation:none!important}}
+@media(max-width:700px){.bus-popup-status-row{padding:0 54px!important}.bus-popup-stage.bus-stage-flash{min-width:0;max-width:100%;font-size:clamp(20px,7vw,42px)!important;white-space:normal}.bus-popup-status-row time{display:none!important}}
