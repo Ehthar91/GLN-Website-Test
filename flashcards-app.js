@@ -15,6 +15,7 @@ const {
   getAuth,
   initializeAuth,
   inMemoryPersistence,
+  browserPopupRedirectResolver,
   GoogleAuthProvider,
   signInWithPopup,
   signOut,
@@ -2683,7 +2684,8 @@ async function initializeFirebase() {
     if (EMBEDDED_CLASSROOM_MODE) {
       state.app = initializeApp(firebaseConfig, "flashcardsClassroomToolsEmbedded");
       state.auth = initializeAuth(state.app, {
-        persistence: inMemoryPersistence
+        persistence: inMemoryPersistence,
+        popupRedirectResolver: browserPopupRedirectResolver
       });
     } else {
       state.app = initializeApp(firebaseConfig);
