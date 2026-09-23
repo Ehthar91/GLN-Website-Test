@@ -9,6 +9,8 @@ const eventSignupPanel=document.querySelector('#eventSignupPanel');
 const busCallPanel=document.querySelector('#busCallPanel');
 const flashcardsPanel=document.querySelector('#flashcardsPanel');
 const flashcardsFrame=document.querySelector('#flashcardsFrame');
+const flashcardsFullscreen=document.querySelector('#flashcardsFullscreen');
+const flashcardsFullscreenTarget=document.querySelector('#flashcardsFullscreenTarget');
 const classroomAccountBar=document.querySelector('#classroomAccountBar');
 const seatingPanel=document.querySelector('#seatingPanel');
 const showDashboard=document.querySelector('#showDashboard');
@@ -74,6 +76,38 @@ showScheduleTimer.onclick=()=>setCalculatorMode('schedule-timer');
 showQuiz.onclick=()=>openQuiz();
 showWheel.onclick=()=>setCalculatorMode('wheel');
 showFlashcards.onclick=()=>setCalculatorMode('flashcards');
+
+function flashcardsIsFullscreen(){
+  return document.fullscreenElement===flashcardsFullscreenTarget || document.webkitFullscreenElement===flashcardsFullscreenTarget;
+}
+function updateFlashcardsFullscreenButton(){
+  if(!flashcardsFullscreen)return;
+  const active=flashcardsIsFullscreen();
+  flashcardsFullscreen.textContent=active?'✕ Exit Full Screen':'⛶ Full Screen';
+  flashcardsFullscreen.setAttribute('aria-pressed',String(active));
+  flashcardsFullscreen.title=active?'Exit Flashcards full screen':'Open Flashcards full screen';
+}
+async function toggleFlashcardsFullscreen(){
+  if(!flashcardsFullscreenTarget)return;
+  try{
+    if(flashcardsIsFullscreen()){
+      if(document.exitFullscreen)await document.exitFullscreen();
+      else if(document.webkitExitFullscreen)document.webkitExitFullscreen();
+    }else{
+      if(flashcardsFullscreenTarget.requestFullscreen)await flashcardsFullscreenTarget.requestFullscreen();
+      else if(flashcardsFullscreenTarget.webkitRequestFullscreen)flashcardsFullscreenTarget.webkitRequestFullscreen();
+    }
+  }catch(err){
+    console.error('Flashcards full screen failed',err);
+  }
+  updateFlashcardsFullscreenButton();
+}
+if(flashcardsFullscreen){
+  flashcardsFullscreen.addEventListener('click',toggleFlashcardsFullscreen);
+  document.addEventListener('fullscreenchange',updateFlashcardsFullscreenButton);
+  document.addEventListener('webkitfullscreenchange',updateFlashcardsFullscreenButton);
+  updateFlashcardsFullscreenButton();
+}
 showEventSignup.onclick=()=>setCalculatorMode('event-signup');
 showBusCall.onclick=()=>setCalculatorMode('bus-call');
 showSeating.onclick=()=>setCalculatorMode('seating');
