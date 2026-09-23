@@ -802,12 +802,20 @@ function renderArchiveManager() {
               Class · ${c.archivedPublished ? "Sharing was enabled" : "Was private"}
             </span>
           </div>
-          <button
-            class="secondary-btn compact-btn"
-            data-restore-class="${c.id}"
-          >
-            Restore
-          </button>
+          <div class="archive-item-actions">
+            <button
+              class="secondary-btn compact-btn"
+              data-restore-class="${c.id}"
+            >
+              Restore
+            </button>
+            <button
+              class="danger-btn compact-btn"
+              data-delete-archived-class="${c.id}"
+            >
+              Delete Permanently
+            </button>
+          </div>
         </article>
       `).join("")
     : `<div class="archive-empty">No archived classes.</div>`;
@@ -954,6 +962,51 @@ async function restoreArchivedClass(classId) {
     showMessage(`"${archivedClass.name}" was restored.`, "success");
   } catch (err) {
     handleFirebaseError(err, "Could not restore the class.");
+  }
+}
+
+async function deleteArchivedClassPermanently(classId) {
+  const archivedClass = state.archivedClasses.find(c => c.id === classId);
+  if (!archivedClass || archivedClass.ownerId !== state.user?.uid) return;
+
+  const className = String(archivedClass.name || "Untitled Class");
+  const typedName = window.prompt(
+    `Permanently delete "${className}" and every deck and card inside it? This cannot be undone.\n\nType the class name exactly to confirm:`
+  );
+
+  if (typedName === null) return;
+
+  if (typedName.trim() !== className.trim()) {
+    showMessage("Class name did not match. Nothing was deleted.", "error");
+    return;
+  }
+
+  try {
+    // Firestore does not automatically delete subcollections when a parent
+    // document is removed, so delete every deck first. Cards are stored in
+    // their deck documents and are removed with those documents.
+    const deckSnap = await getDocs(
+      collection(state.db, "classes", classId, "decks")
+    );
+
+    for (const deckSnapDoc of deckSnap.docs) {
+      await deleteDoc(deckSnapDoc.ref);
+    }
+
+    await deleteDoc(doc(state.db, "classes", classId));
+
+    if (state.selectedClass?.id === classId) {
+      state.selectedClass = null;
+      state.decks = [];
+    }
+
+    await loadLibrary();
+    await loadArchivedDecks();
+    renderArchiveManager();
+
+    showMessage(`"${className}" was permanently deleted.`, "success");
+  } catch (err) {
+    handleFirebaseError(err, "Could not permanently delete the class.");
   }
 }
 
@@ -2798,6 +2851,13 @@ document.addEventListener("click", async e => {
   const restoreClassBtn = e.target.closest("[data-restore-class]");
   if (restoreClassBtn) {
     return restoreArchivedClass(restoreClassBtn.dataset.restoreClass);
+  }
+
+  const deleteArchivedClassBtn = e.target.closest("[data-delete-archived-class]");
+  if (deleteArchivedClassBtn) {
+    return deleteArchivedClassPermanently(
+      deleteArchivedClassBtn.dataset.deleteArchivedClass
+    );
   }
 
   const restoreDeckBtn = e.target.closest("[data-restore-deck]");

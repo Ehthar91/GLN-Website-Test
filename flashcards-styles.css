@@ -2775,6 +2775,19 @@ body.dark .archive-btn {
   font-size: .75rem;
 }
 
+.archive-item-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.archive-item-actions .danger-btn {
+  border: 1px solid rgba(200, 84, 94, .24);
+  white-space: nowrap;
+}
+
 .archive-empty {
   min-height: 74px;
   padding: 20px;
@@ -2789,9 +2802,14 @@ body.dark .archive-btn {
     grid-template-columns: 38px minmax(0,1fr);
   }
 
-  .archive-item > button {
+  .archive-item > button,
+  .archive-item-actions {
     grid-column: 2;
     justify-self: start;
+  }
+
+  .archive-item-actions {
+    justify-content: flex-start;
   }
 }
 
