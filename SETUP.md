@@ -1,55 +1,155 @@
-# GLN Karen Typing Center — GitHub Pages Classroom Race Fix
+# Flashcards — Class + Deck Architecture
 
-This patch keeps your existing site design and replaces only the Classroom Car Race backend.
+This build uses the Brainscape-style hierarchy:
 
-## Files to upload to your GitHub repository
+- One account type
+- My Flashcards
+- Classes
+- Multiple decks inside each class
+- One share link per class
+- Shared classes are linked, not copied
+- Shared users have study-only access
+- Owner changes automatically appear for followers
 
-1. Replace your existing `race.js` with the new `race.js` in this folder.
-2. Add `firebase-config.js` to the same folder as `index.html`.
-3. Keep your existing `index.html`, `race.css`, `app.js`, `games.js`, and all other files unchanged.
+## Firestore structure
 
-## One-time Firebase setup
-
-1. Go to Firebase Console and create a project.
-2. Add a Web App to the project.
-3. In Authentication, enable **Anonymous** sign-in.
-4. Create a **Realtime Database**.
-5. Open Realtime Database → Rules and replace the rules with the contents of `firebase-rules.json`, then Publish.
-6. In Project settings → Your apps → SDK setup and configuration, copy your Firebase config.
-7. Open `firebase-config.js` and replace every `PASTE_...` value with your actual Firebase values.
-8. Upload the updated `firebase-config.js` and `race.js` to your GitHub repository.
-9. Wait a minute or two for GitHub Pages to redeploy, then hard-refresh the site.
-
-## Test
-
-Teacher:
-- Games → Classroom Car Race → Create a race
-- Share the 5-character room code
-- Wait for students, then Start race
-
-Students:
-- Games → Classroom Car Race
-- Enter room code + name
-- Join race
-- Type when the teacher starts
-
-The cars update live through Firebase Realtime Database, so students can use separate Chromebooks/computers.
+- `users/{uid}`
+- `users/{uid}/library/{classId}`
+- `classes/{classId}`
+- `classes/{classId}/decks/{deckId}`
+- `progress/{classId}_{deckId}_{studentId}`
 
 ## Important
 
-Your Firebase web config is designed to be used in client-side web apps. Access control is enforced by the Realtime Database rules. Do not replace the provided rules with fully-public read/write rules.
+Replace your current Firestore Rules with the included `firestore.rules` and click Publish.
+
+## Sharing
+
+The owner clicks SHARE on the class.
+
+The link looks like:
+
+`https://YOUR-GITHUB-PAGES/Flashcards/?class=FIREBASE_CLASS_ID`
+
+A signed-in student who opens it gets the class added to My Flashcards with study-only access.
+
+The student's library stores a reference to the class, not copies of the decks. If the owner adds, removes, renames, or edits a deck, the student sees the new version next time the class loads.
+
+## GitHub
+
+Upload these files together in the repository root:
+
+- `index.html`
+- `styles.css`
+- `app.js`
+- `firebase-config.js`
+
+`firestore.rules` and `SETUP.md` can stay in the repository for reference.
 
 
-## Classroom Typing Tug of War
+## Deck visibility / drafts
 
-This version uses Firebase Realtime Database for multiplayer **Typing Tug of War**. The host can paste a custom word/sentence list, create a five-character room code, choose how teams are assigned, and watch both teams compete live. Players join with the code, choose an avatar, and type the host's prompts to earn pull points for Team Red or Team Blue.
+Each deck now has its own `published` visibility flag.
 
-Each correct prompt earns one pull point. Fast, error-free typing can earn one bonus pull point. The rope uses each team's average pull contribution so slightly uneven team sizes stay fair.
+- `published: true` = visible to students following the class.
+- `published: false` = hidden draft; only the class owner can see it.
+- The class itself can remain shared while you prepare future decks privately.
+- Students query only visible decks.
+- Owners see both visible and hidden decks.
 
-When updating this version, publish the included `firebase-rules.json` in **Firebase Console → Realtime Database → Rules** so the new `tugRooms` path is allowed.
+The class owner can use **Show / Hide** directly from the Decks tab or change **Visible to students** while editing a deck.
 
-## Event Sign Up
 
-Event Sign Up uses Firebase Realtime Database for public signup links. Before testing the feature, publish the updated `firebase-rules.json` in Firebase Console → Realtime Database → Rules. See `EVENT-SIGN-UP-FIREBASE-SETUP.txt` for the short setup checklist.
+## Custom quiz question templates
 
-Public signup pages expose only the event title/date/instructions and slot details. Participant names are readable only by the event owner and by the participant who created that signup.
+Quiz Setup now includes **Question wording → Custom Question**.
+
+Example:
+
+`What is the answer for {term}?`
+
+`{term}` is replaced by the flashcard prompt term after applying the selected direction:
+
+- Front → Back: `{term}` = card front; correct answer = card back.
+- Back → Front: `{term}` = card back; correct answer = card front.
+- Mixed: the direction is selected per question.
+
+Custom templates must contain `{term}`.
+
+## Google Forms Quiz export — downloadable `.gs`
+
+The Flashcards site does not connect to Google Apps Script.
+
+Click **Download Google Forms Script (.gs)** in Quiz Setup. The downloaded script contains that exact quiz.
+
+To create the Form:
+
+1. Open Google Apps Script and create a new project.
+2. Replace the starter code with the downloaded `.gs` file.
+3. Save.
+4. Run `createFlashcardsQuiz()`.
+5. Approve Google permissions the first time.
+6. Open the execution log for the Form editor/student URLs, or find the new Form in Google Drive.
+
+
+## Copy cards between decks and classes
+
+Class owners can copy cards into any deck they own.
+
+1. Open the destination class.
+2. In the destination deck, click **Copy**.
+3. Choose a source class.
+4. Choose a source deck.
+5. Select individual cards or use **Select All**.
+6. Leave **Skip cards already in the destination deck** enabled to avoid exact duplicate front/back pairs.
+7. Click **Copy Selected Cards**.
+
+Sources can include:
+
+- other decks in the current class,
+- decks in another class you own,
+- visible decks from a class shared with you.
+
+The source cards are not moved or linked. New independent card IDs are created in the destination deck, so later edits do not affect the original cards.
+
+No Firestore rule changes are required because source reads use the same existing owner/shared-class permissions and the destination write is restricted to the destination class owner.
+
+
+## Archive classes and decks
+
+Class owners can archive classes and individual decks without deleting them.
+
+### Archive a class
+Open the class → Edit Class → **Archive Class**.
+
+- The class disappears from the normal class list.
+- Sharing is temporarily turned off while archived.
+- Its previous sharing setting is remembered.
+- All decks/cards stay in Firestore.
+- The class remains available as a source in **Copy Cards**.
+
+### Archive a deck
+Open the deck → Edit Deck → **Archive Deck**.
+
+- The deck disappears from the normal Decks tab.
+- It is hidden from students while archived.
+- Its previous visibility setting is remembered.
+- Its cards remain available in **Copy Cards**.
+
+### Restore
+Use the **Archived** button at the bottom of the sidebar.
+
+Archived classes and decks each have a **Restore** button. Restoring returns the previous sharing/visibility setting.
+
+No Firestore rule change is required for this feature. Archive/restore writes remain owner-only under the existing rules.
+
+
+## Archive a class from the sidebar
+
+Owned classes now have a small archive button on the right side of the sidebar row.
+
+- Hover over an owned class to reveal it.
+- Click the archive icon and confirm.
+- The class moves to **Archived** immediately.
+- Shared classes do not show the archive icon.
+- Archived cards remain available through Copy Cards.
