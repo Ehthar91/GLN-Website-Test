@@ -7,6 +7,9 @@ const scheduleTimerPanel=document.querySelector('#scheduleTimerPanel');
 const wheelPanel=document.querySelector('#wheelPanel');
 const eventSignupPanel=document.querySelector('#eventSignupPanel');
 const busCallPanel=document.querySelector('#busCallPanel');
+const flashcardsPanel=document.querySelector('#flashcardsPanel');
+const flashcardsFrame=document.querySelector('#flashcardsFrame');
+const classroomAccountBar=document.querySelector('#classroomAccountBar');
 const seatingPanel=document.querySelector('#seatingPanel');
 const showDashboard=document.querySelector('#showDashboard');
 const showCalculator=document.querySelector('#showCalculator');
@@ -14,6 +17,7 @@ const showNumberGenerator=document.querySelector('#showNumberGenerator');
 const showScheduleTimer=document.querySelector('#showScheduleTimer');
 const showQuiz=document.querySelector('#showQuiz');
 const showWheel=document.querySelector('#showWheel');
+const showFlashcards=document.querySelector('#showFlashcards');
 const showEventSignup=document.querySelector('#showEventSignup');
 const showBusCall=document.querySelector('#showBusCall');
 const showSeating=document.querySelector('#showSeating');
@@ -27,6 +31,7 @@ function setCalculatorMode(mode){
   const scheduleTimer=mode==='schedule-timer';
   const quiz=mode==='quiz';
   const wheel=mode==='wheel';
+  const flashcards=mode==='flashcards';
   const eventSignup=mode==='event-signup';
   const busCall=mode==='bus-call';
   const seating=mode==='seating';
@@ -36,6 +41,7 @@ function setCalculatorMode(mode){
   scheduleTimerPanel.hidden=!scheduleTimer;
   quizView.hidden=!quiz;
   wheelPanel.hidden=!wheel;
+  flashcardsPanel.hidden=!flashcards;
   eventSignupPanel.hidden=!eventSignup;
   busCallPanel.hidden=!busCall;
   seatingPanel.hidden=!seating;
@@ -45,11 +51,14 @@ function setCalculatorMode(mode){
   showScheduleTimer.classList.toggle('active',scheduleTimer);
   showQuiz.classList.toggle('active',quiz);
   showWheel.classList.toggle('active',wheel);
+  showFlashcards.classList.toggle('active',flashcards);
   showEventSignup.classList.toggle('active',eventSignup);
   showBusCall.classList.toggle('active',busCall);
   showSeating.classList.toggle('active',seating);
-  calculatorTitle.textContent=dashboard?'Classroom Dashboard':seating?'Seating Chart':busCall?'Bus Call':eventSignup?'Event Sign Up':wheel?'Name Picker':quiz?'Quiz':scheduleTimer?'Schedule Timer':numberGenerator?'Number Generator':'Graphing & Scientific Calculator';
-  calculatorHint.textContent=dashboard?'Choose a class, see today’s schedule, and open your classroom tools from one place.':seating?'Create, arrange, and print a classroom seating plan.':busCall?'Send a bus number to every classroom listening with the same room code.':eventSignup?'Create shareable signup events and link filled time slots to Special Schedules.':wheel?'Paste a list, spin, and select someone or something at random.':quiz?'Create, practice, and run classroom quizzes.':scheduleTimer?'Create multiple timers that start automatically at their scheduled times.':numberGenerator?'Generate classroom numbers from any range, with an optional no-repeat mode.':'Choose GLN TI-84 or GLN TI-30XS inside the calculator.';
+  calculatorTitle.textContent=dashboard?'Classroom Dashboard':seating?'Seating Chart':busCall?'Bus Call':eventSignup?'Conference Sign-Up':flashcards?'Flashcards':wheel?'Name Picker':quiz?'Quiz':scheduleTimer?'Schedule Timer':numberGenerator?'Number Generator':'Graphing & Scientific Calculator';
+  calculatorHint.textContent=dashboard?'Choose a class, see today’s schedule, and open your classroom tools from one place.':seating?'Create, arrange, and print a classroom seating plan.':busCall?'Send a bus number to every classroom listening with the same room code.':eventSignup?'Create conference time slots, share the sign-up link, and link filled times to Special Schedules.':flashcards?'Create classes and decks, study cards, run quizzes, share classes, and export quizzes to Google Forms.':wheel?'Paste a list, spin, and select someone or something at random.':quiz?'Create, practice, and run classroom quizzes.':scheduleTimer?'Create multiple timers that start automatically at their scheduled times.':numberGenerator?'Generate classroom numbers from any range, with an optional no-repeat mode.':'Choose GLN TI-84 or GLN TI-30XS inside the calculator.';
+  if(classroomAccountBar)classroomAccountBar.hidden=flashcards;
+  if(flashcards&&flashcardsFrame&&flashcardsFrame.dataset.src&&flashcardsFrame.getAttribute('src')==='about:blank')flashcardsFrame.src=flashcardsFrame.dataset.src;
   if(dashboard)setTimeout(()=>{refreshDashboardClasses();updateClassroomDashboard()},0);
   if(numberGenerator)setTimeout(()=>{numberGeneratorMin.focus();queueFitNumberGeneratorResult()},0);
   if(scheduleTimer)setTimeout(()=>{renderScheduleTimers();updateScheduleTimerClock()},0);
@@ -64,6 +73,7 @@ showNumberGenerator.onclick=()=>setCalculatorMode('number-generator');
 showScheduleTimer.onclick=()=>setCalculatorMode('schedule-timer');
 showQuiz.onclick=()=>openQuiz();
 showWheel.onclick=()=>setCalculatorMode('wheel');
+showFlashcards.onclick=()=>setCalculatorMode('flashcards');
 showEventSignup.onclick=()=>setCalculatorMode('event-signup');
 showBusCall.onclick=()=>setCalculatorMode('bus-call');
 showSeating.onclick=()=>setCalculatorMode('seating');
@@ -433,15 +443,15 @@ function makeDeleteButton(id,name){
 }
 function makeSpecialScheduleCard(entry,today){
   const expired=entry.date<today;const linkedEvent=Boolean(entry.linkedEventId);const card=document.createElement('article');card.className=`special-schedule-card${entry.enabled?'':' is-disabled'}${expired?' is-expired':''}${linkedEvent?' is-event-linked':''}`;
-  const head=document.createElement('div');head.className='special-schedule-card-head';const copy=document.createElement('div');const title=document.createElement('div');title.className='special-schedule-card-title';const name=document.createElement('strong');name.textContent=entry.name;const badge=document.createElement('span');badge.className='schedule-type-badge';badge.textContent=expired?'Past':linkedEvent?'Event Sign Up':'Special';title.append(name,badge);const meta=document.createElement('small');meta.textContent=`${formatScheduleDate(entry.date)} · ${entry.slots.length} time slot${entry.slots.length===1?'':'s'}${linkedEvent?' · linked automatically':''}`;copy.append(title,meta);
+  const head=document.createElement('div');head.className='special-schedule-card-head';const copy=document.createElement('div');const title=document.createElement('div');title.className='special-schedule-card-title';const name=document.createElement('strong');name.textContent=entry.name;const badge=document.createElement('span');badge.className='schedule-type-badge';badge.textContent=expired?'Past':linkedEvent?'Conference Sign-Up':'Special';title.append(name,badge);const meta=document.createElement('small');meta.textContent=`${formatScheduleDate(entry.date)} · ${entry.slots.length} time slot${entry.slots.length===1?'':'s'}${linkedEvent?' · linked automatically':''}`;copy.append(title,meta);
   const actions=document.createElement('div');actions.className='schedule-row-actions';
   if(linkedEvent){
-    const open=document.createElement('button');open.type='button';open.textContent='Open event';open.addEventListener('click',()=>window.openEventSignupById?.(entry.linkedEventId));actions.append(open);
+    const open=document.createElement('button');open.type='button';open.textContent='Open conference';open.addEventListener('click',()=>window.openEventSignupById?.(entry.linkedEventId));actions.append(open);
   }else{
     const enabled=makeScheduleToggle(entry);const edit=document.createElement('button');edit.type='button';edit.textContent='Edit';edit.addEventListener('click',()=>editClassroomSchedule(entry.id));const duplicate=document.createElement('button');duplicate.type='button';duplicate.textContent='Duplicate';duplicate.addEventListener('click',()=>duplicateSpecialSchedule(entry));const del=makeDeleteButton(entry.id,entry.name);actions.append(enabled,edit,duplicate,del);
   }
   head.append(copy,actions);
-  const slots=document.createElement('div');slots.className='special-schedule-slots';entry.slots.slice().sort((a,b)=>a.time.localeCompare(b.time)).forEach(slot=>{const row=document.createElement('div');row.className='special-schedule-slot';const time=document.createElement('strong');time.textContent=formatScheduleTime(slot.time);const slotCopy=document.createElement('div');const slotName=document.createElement('b');slotName.textContent=slot.name;const duration=document.createElement('small');duration.textContent=`${slot.duration} min${linkedEvent?' · Event Sign Up':''}`;slotCopy.append(slotName,duration);const run=document.createElement('button');run.type='button';run.textContent='Run now';run.addEventListener('click',()=>runSpecialSlotNow(entry,slot));row.append(time,slotCopy,run);slots.append(row)});
+  const slots=document.createElement('div');slots.className='special-schedule-slots';entry.slots.slice().sort((a,b)=>a.time.localeCompare(b.time)).forEach(slot=>{const row=document.createElement('div');row.className='special-schedule-slot';const time=document.createElement('strong');time.textContent=formatScheduleTime(slot.time);const slotCopy=document.createElement('div');const slotName=document.createElement('b');slotName.textContent=slot.name;const duration=document.createElement('small');duration.textContent=`${slot.duration} min${linkedEvent?' · Conference Sign-Up':''}`;slotCopy.append(slotName,duration);const run=document.createElement('button');run.type='button';run.textContent='Run now';run.addEventListener('click',()=>runSpecialSlotNow(entry,slot));row.append(time,slotCopy,run);slots.append(row)});
   card.append(head,slots);return card;
 }
 function duplicateSpecialSchedule(entry){

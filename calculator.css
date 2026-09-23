@@ -318,7 +318,7 @@ body.schedule-fullscreen-open{overflow:hidden}
 .calculator-heading{width:100%;margin-bottom:18px}
 .calculator-mode-switch{
   display:grid;
-  grid-template-columns:repeat(8,minmax(0,1fr));
+  grid-template-columns:repeat(9,minmax(0,1fr));
   width:min(1320px,100%);
   max-width:1320px;
   margin:0 auto 14px;
@@ -340,6 +340,10 @@ body.schedule-fullscreen-open{overflow:hidden}
   margin-right:0;
 }
 .number-generator-card,.schedule-timer-card,.wheel-card{max-width:none}
+.flashcards-tool-panel{width:100%;max-width:none;margin:0;padding:0}
+.flashcards-tool-panel[hidden]{display:none!important}
+.flashcards-tool-frame{width:100%;min-height:720px;overflow:hidden;border:1px solid #cad9e8;border-radius:18px;background:#f4f7fb;box-shadow:0 8px 24px rgba(18,33,63,.06)}
+.flashcards-tool-frame iframe{display:block;width:100%;height:calc(100vh - 190px);min-height:720px;border:0;background:#f4f7fb}
 .quiz-view.classroom-tool-panel{padding:0}
 .quiz-view.classroom-tool-panel>.quiz-heading{display:none}
 .quiz-view.classroom-tool-panel .quiz-builder,
@@ -486,3 +490,10 @@ body.theme-rgb .wheel-color-heading strong{color:#f1f7ff}body.theme-rgb .wheel-c
 body.theme-rgb .wheel-color-mode-switch{border-color:#315271;background:#0b1729}body.theme-rgb .wheel-color-mode-switch button{color:#9fb1ca}body.theme-rgb .wheel-color-mode-switch button.active{color:#fff;background:linear-gradient(135deg,#153c64,#40235f);box-shadow:0 0 0 1px #5ce5ff,0 0 12px rgba(22,224,255,.18)}
 body.theme-rgb .wheel-color-row{border-color:#294967;background:#10243c}body.theme-rgb .wheel-color-row>span{color:#f1f7ff}body.theme-rgb .wheel-color-row code{color:#c6d7e9}body.theme-rgb .wheel-color-row input[type="color"]{border-color:#3a5b7b;background:#0d1f35}body.theme-rgb .wheel-color-empty{border-color:#315271;color:#a9bdd4}
 @media(max-width:620px){.wheel-color-heading{align-items:stretch;flex-direction:column}.wheel-color-mode-switch{width:100%;min-width:0}.wheel-color-row{grid-template-columns:minmax(0,1fr) 44px 70px}}
+
+
+/* Embedded Flashcards Classroom Tool */
+@media(max-width:680px){
+  .flashcards-tool-frame{min-height:640px;border-radius:14px}
+  .flashcards-tool-frame iframe{height:calc(100vh - 160px);min-height:640px}
+}
