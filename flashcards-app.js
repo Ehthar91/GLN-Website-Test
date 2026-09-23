@@ -2,6 +2,7 @@ import { firebaseConfig } from "./flashcards-firebase-config.js";
 
 const FIREBASE_VERSION = "12.19.0";
 const THEME_KEY = "flashcards_brainscape_theme";
+const EMBEDDED_CLASSROOM_MODE = new URLSearchParams(window.location.search).get("embedded") === "classroom";
 
 const [appModule, authModule, firestoreModule] = await Promise.all([
   import(`https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-app.js`),
@@ -12,6 +13,8 @@ const [appModule, authModule, firestoreModule] = await Promise.all([
 const { initializeApp } = appModule;
 const {
   getAuth,
+  initializeAuth,
+  inMemoryPersistence,
   GoogleAuthProvider,
   signInWithPopup,
   signOut,
@@ -2673,8 +2676,20 @@ function initTheme() {
 
 async function initializeFirebase() {
   try {
-    state.app = initializeApp(firebaseConfig);
-    state.auth = getAuth(state.app);
+    // Classroom Tools embeds Flashcards in an iframe. Give that embedded copy its
+    // own named Firebase app and in-memory Auth instance so it never restores
+    // the standalone Flashcards login from this browser. The standalone page
+    // keeps Firebase's normal persistent sign-in behavior.
+    if (EMBEDDED_CLASSROOM_MODE) {
+      state.app = initializeApp(firebaseConfig, "flashcardsClassroomToolsEmbedded");
+      state.auth = initializeAuth(state.app, {
+        persistence: inMemoryPersistence
+      });
+    } else {
+      state.app = initializeApp(firebaseConfig);
+      state.auth = getAuth(state.app);
+    }
+
     state.db = getFirestore(state.app);
 
     onAuthStateChanged(state.auth, async user => {
