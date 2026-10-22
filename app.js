@@ -46,8 +46,8 @@ function unifiedDesktopKey(label,char,value,onKey,expected){
   if(expected?.key===label)b.classList.add('expected');
   b.addEventListener('click',()=>onKey?.(value,label));return b
 }
-function renderUnifiedDesktopKeyboard(box,{language=typingLanguage,shifted=false,expected=null,hintShift=false,onKey=()=>{},onBackspace=()=>{},onEnter=()=>{},onShift=null,onCaps=null,onTab=()=>{}}={}){
-  const layout=rowsForLanguage(language);box.classList.add('real-keyboard');
+function renderUnifiedDesktopKeyboard(box,{language=typingLanguage,shifted=false,expected=null,hintShift=false,onKey=()=>{},onBackspace=()=>{},onEnter=()=>{},onShift=null,onCaps=null,onTab=()=>{},layoutOverride=null}={}){
+  const layout=layoutOverride||rowsForLanguage(language);box.classList.add('real-keyboard');
   const shiftAction=onShift?()=>onShift(!shifted):()=>{};
   const capsAction=onCaps?()=>onCaps(!shifted):shiftAction;
   layout.forEach((row,rowIndex)=>{
