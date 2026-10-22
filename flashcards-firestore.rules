@@ -7,6 +7,11 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function teacherSignedIn() {
+      return signedIn()
+        && request.auth.token.firebase.sign_in_provider != "anonymous";
+    }
+
     function classExists(classId) {
       return exists(/databases/$(database)/documents/classes/$(classId));
     }
@@ -46,7 +51,12 @@ service cloud.firestore {
           && request.resource.data.classId == classId
           && request.resource.data.access == "study";
 
-        allow delete: if signedIn() && request.auth.uid == uid;
+        // A learner can remove a class from their own library. The class owner
+        // can also remove that learner from a class they own.
+        allow delete: if signedIn() && (
+          request.auth.uid == uid
+          || ownsClass(classId)
+        );
       }
     }
 
@@ -60,7 +70,9 @@ service cloud.firestore {
       allow list: if signedIn()
         && resource.data.ownerId == request.auth.uid;
 
-      allow create: if signedIn()
+      // Only a real signed-in teacher account can create classes. Anonymous
+      // guest sessions are study-only and cannot become class owners.
+      allow create: if teacherSignedIn()
         && request.resource.data.ownerId == request.auth.uid;
 
       allow update, delete: if signedIn()
@@ -117,8 +129,12 @@ service cloud.firestore {
         && request.resource.data.classId == resource.data.classId
         && request.resource.data.deckId == resource.data.deckId;
 
-      allow delete: if signedIn()
-        && resource.data.studentId == request.auth.uid;
+      // Learners can delete their own progress. Class owners can delete
+      // progress for learners they remove from a class they own.
+      allow delete: if signedIn() && (
+        resource.data.studentId == request.auth.uid
+        || ownsClass(resource.data.classId)
+      );
     }
   }
 }

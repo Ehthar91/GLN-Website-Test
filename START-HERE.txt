@@ -1,0 +1,24 @@
+GLN Karen Typing Center - Two-Folder Package
+
+This archive contains the complete updated project, organized into two folders.
+
+1. 01-Website-Files/
+   All deployable website files (including HTML, JavaScript, CSS, images, CNAME,
+   web manifest, and Firebase client configuration). For GitHub Pages, copy the
+   CONTENTS of this folder into your website repository root. Keep all the
+   relative paths and filenames unchanged; do not upload the enclosing folder
+   in place of the repository root.
+
+2. 02-Setup-and-Configuration/
+   Setup guides, Firebase Realtime Database and Firestore security rules,
+   project/Worker build scripts, and database development snapshots.
+   These are NOT automatically published by deploying the website files.
+   If Firebase rule changes are required, publish them in the corresponding
+   Firebase Console. Do not deploy SQL files or database snapshots to the web.
+
+   To run the optional Worker build, place package.json, build-worker.mjs, and
+   index.js in the same directory as the website files first. The ordinary
+   GitHub Pages static deployment does not need the Worker build step.
+
+This is a structural reorganization of the latest full build, including the
+Sgaw Karen Classroom Quiz A-key change. No application code was altered.
