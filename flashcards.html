@@ -5,9 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#314f73" />
   <title>Flashcards</title>
-  <link rel="stylesheet" href="flashcards-styles.css?v=20260923-rootfix-1" />
+  <link rel="stylesheet" href="flashcards-styles.css?v=20260924-guest-study-1" />
+  <link rel="stylesheet" href="creator-credit.css?v=20260912-1" />
+  <style>
+    html.flashcards-embedded .creator-credit { display: none !important; }
+  </style>
 </head>
 <body>
+  <script>
+    (() => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("embedded") === "classroom") {
+        document.documentElement.classList.add("flashcards-embedded");
+      }
+    })();
+  </script>
   <div id="globalMessage" class="global-message hidden" role="status"></div>
 
   <section id="loginView" class="view auth-view">
@@ -24,7 +36,7 @@
         <span class="eyebrow">My Flashcards</span>
         <h2>Create classes with multiple decks.</h2>
         <p>
-          Share one class link. Students save the class to their account with study-only access,
+          Share one class link. Students can open it and study as guests without a Google sign-in,
           and any deck changes you make appear automatically.
         </p>
         <button id="googleSignInBtn" class="primary-btn google-btn">
@@ -46,12 +58,13 @@
       </div>
 
       <article class="auth-card">
-        <span class="eyebrow">Class invitation</span>
-        <h2 id="sharedClassSignInTitle">A class was shared with you.</h2>
-        <p>Sign in to add this class to <strong>My Flashcards</strong> with study-only access.</p>
-        <button id="sharedGoogleSignInBtn" class="primary-btn google-btn">
+        <span class="eyebrow">Shared class</span>
+        <h2 id="sharedClassSignInTitle">Opening shared class…</h2>
+        <p>Starting guest study. No Google account or sign-in is required.</p>
+        <div class="guest-opening-indicator" aria-live="polite">Preparing flashcards…</div>
+        <button id="sharedGoogleSignInBtn" class="primary-btn google-btn hidden" tabindex="-1" aria-hidden="true">
           <span class="google-g">G</span>
-          Sign in and add class
+          Continue with Google
         </button>
       </article>
     </div>
@@ -155,14 +168,58 @@
             </div>
 
             <div class="class-actions">
-              <button id="studyClassBtn" class="study-main-btn">
-                STUDY <span>▶</span>
-              </button>
-              <button id="quizClassBtn" class="quiz-main-btn">
-                QUIZ <span>?</span>
-              </button>
-              <button id="shareClassBtn" class="share-btn hidden">⌯ SHARE</button>
-              <button id="removeSharedClassBtn" class="quiet-btn hidden">Remove from My Flashcards</button>
+              <div class="class-primary-actions">
+                <button id="studyClassBtn" class="study-main-btn">
+                  STUDY <span>▶</span>
+                </button>
+                <button id="quizClassBtn" class="quiz-main-btn">
+                  QUIZ <span>?</span>
+                </button>
+
+                <details id="classShareTools" class="class-share-tools hidden">
+                  <summary>
+                    <span class="class-share-icon" aria-hidden="true">↗</span>
+                    <span class="class-share-label">SHARE</span>
+                    <small>Link &amp; Google Classroom</small>
+                    <span class="class-share-chevron" aria-hidden="true">⌄</span>
+                  </summary>
+                  <div class="class-share-tools-panel">
+                    <div id="linkPreviewAction" class="link-preview-action hidden" aria-label="Customize how the pasted class link appears">
+                      <div class="link-preview-heading">
+                        <span>PASTED LINK NAME</span>
+                        <small>Controls the <strong>name=</strong> value in the copied class link. This does not rename the class.</small>
+                      </div>
+                      <div class="link-preview-title-row">
+                        <label class="sr-only" for="linkPreviewTitleInput">Link display name</label>
+                        <input id="linkPreviewTitleInput" class="link-preview-title-input" type="text" maxlength="120" autocomplete="off" />
+                        <button id="linkPreviewUseClassNameBtn" class="link-preview-title-btn" type="button">Use Class Name</button>
+                        <button id="linkPreviewSaveTitleBtn" class="link-preview-title-btn" type="button">Save</button>
+                        <button id="shareClassBtn" class="share-btn hidden" type="button">⌯ COPY LINK</button>
+                      </div>
+                      <small id="linkPreviewTitleStatus">Using the class name automatically. Type a different name before Copy Link if you want a shorter display name.</small>
+                    </div>
+
+                    <div id="classroomShareAction" class="classroom-share-action hidden" aria-label="Share this flashcard class to Google Classroom">
+                      <div class="classroom-share-heading">
+                        <span>GOOGLE CLASSROOM POST TITLE</span>
+                        <small>Optional title for the Google Classroom Share button. Separate from the pasted-link name.</small>
+                      </div>
+                      <div class="classroom-share-title-row">
+                        <label class="sr-only" for="classroomShareTitleInput">Google Classroom share title</label>
+                        <input id="classroomShareTitleInput" class="classroom-share-title-input" type="text" maxlength="120" autocomplete="off" />
+                        <button id="classroomUseClassNameBtn" class="classroom-share-title-btn" type="button">Use Class Name</button>
+                        <button id="classroomSaveShareTitleBtn" class="classroom-share-title-btn save" type="button">Save Title</button>
+                      </div>
+                      <div class="classroom-share-footer">
+                        <small id="classroomShareTitleStatus">This only changes the Google Classroom share title.</small>
+                        <div id="classroomShareWidget" aria-label="Share to Google Classroom"></div>
+                      </div>
+                    </div>
+                  </div>
+                </details>
+
+                <button id="removeSharedClassBtn" class="quiet-btn hidden">Remove from My Flashcards</button>
+              </div>
             </div>
           </div>
 
@@ -193,9 +250,17 @@
 
         <section id="decksTab" class="tab-panel">
           <div class="deck-toolbar">
-            <div class="toolbar-left">
-              <span class="check-circle">✓</span>
-              <strong>All</strong>
+            <div class="toolbar-left deck-toolbar-left">
+              <strong>Decks</strong>
+              <div id="deckStudySelector" class="deck-study-selector hidden">
+                <label class="deck-select-all">
+                  <input id="selectAllStudyDecks" type="checkbox" />
+                  <span>Select all</span>
+                </label>
+                <span id="selectedDeckCount" class="selected-deck-count">Choose two or more decks to study together</span>
+                <button id="studySelectedDecksBtn" class="study-selected-decks-btn" type="button" disabled>Study Selected</button>
+                <button id="clearDeckSelectionBtn" class="clear-deck-selection-btn" type="button" disabled>Clear</button>
+              </div>
             </div>
             <div id="ownerDeckTools" class="toolbar-right hidden">
               <button id="newDeckBtn" class="new-deck-link">＋ Create New Deck</button>
@@ -279,7 +344,7 @@
               <h2 id="quizTitle">Quiz</h2>
             </div>
             <div class="quiz-score-box">
-              <span>Score</span>
+              <span id="quizLiveMetricLabel">Score</span>
               <strong id="quizLiveScore">0 / 0</strong>
             </div>
           </div>
@@ -325,12 +390,14 @@
           <div class="quiz-results-stats">
             <div><span>Correct</span><strong id="quizCorrectCount">0 / 0</strong></div>
             <div><span>Score</span><strong id="quizPercent">0%</strong></div>
+            <div><span>Missed</span><strong id="quizMissedCount">0</strong></div>
           </div>
 
           <div id="quizReview" class="quiz-review"></div>
 
-          <div class="complete-actions">
-            <button id="quizTryAgainBtn" class="primary-btn">Try Again</button>
+          <div class="complete-actions quiz-result-actions">
+            <button id="quizRetryMissedBtn" class="primary-btn hidden">Retry Missed</button>
+            <button id="quizTryAgainBtn" class="secondary-btn">Try Full Quiz Again</button>
             <button id="quizBackToClassBtn" class="secondary-btn">Back to Class</button>
           </div>
         </article>
@@ -356,7 +423,82 @@
     </main>
   </section>
 
+  <div id="sidebarClassMenu" class="sidebar-class-menu" role="menu" hidden>
+    <button type="button" data-sidebar-menu-action="share" role="menuitem">
+      <span aria-hidden="true">↗</span><span>Share</span>
+    </button>
+    <button type="button" data-sidebar-menu-action="duplicate" data-owner-only role="menuitem">
+      <span aria-hidden="true">⧉</span><span>Duplicate</span>
+    </button>
+    <button type="button" data-sidebar-menu-action="archive" data-owner-only role="menuitem">
+      <span aria-hidden="true">▣</span><span>Archive</span>
+    </button>
+    <div class="sidebar-class-menu-divider" data-owner-only></div>
+    <button type="button" class="danger" data-sidebar-menu-action="delete" data-owner-only role="menuitem">
+      <span aria-hidden="true">⌫</span><span>Delete</span>
+    </button>
+  </div>
+
   <div id="modalBackdrop" class="modal-backdrop hidden">
+    <div id="sidebarShareModal" class="modal sidebar-share-modal hidden">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">Share class</span>
+          <h2 id="sidebarShareClassName">Class</h2>
+        </div>
+        <button class="modal-close" data-close-modal>×</button>
+      </div>
+
+      <div class="sidebar-share-box">
+        <div class="sidebar-share-box-heading">
+          <span>LINK DISPLAY NAME</span>
+          <small>Change only how this copied link appears. This does not rename the class.</small>
+        </div>
+
+        <label for="sidebarShareLinkNameInput">Link display name</label>
+        <input id="sidebarShareLinkNameInput" type="text" maxlength="120" autocomplete="off" />
+
+        <div class="sidebar-share-name-actions">
+          <button id="sidebarShareUseClassNameBtn" class="secondary-btn" type="button">Use Class Name</button>
+          <button id="sidebarShareSaveNameBtn" class="secondary-btn" type="button">Save Display Name</button>
+        </div>
+
+        <label for="sidebarShareUrlPreview">Link preview</label>
+        <input id="sidebarShareUrlPreview" class="sidebar-share-url-preview" type="text" readonly />
+        <small id="sidebarShareStatus">Type a display name, then copy the link.</small>
+      </div>
+
+      <div class="modal-actions sidebar-share-modal-actions">
+        <button id="sidebarShareCopyLinkBtn" class="primary-btn" type="button">Copy Link</button>
+        <button class="secondary-btn" data-close-modal type="button">Close</button>
+      </div>
+    </div>
+
+    <div id="removeLearnerModal" class="modal remove-learner-modal hidden">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">Owner controls</span>
+          <h2 id="removeLearnerModalTitle">Remove learner?</h2>
+        </div>
+        <button class="modal-close" data-close-modal>×</button>
+      </div>
+
+      <div class="remove-learner-summary">
+        <strong id="removeLearnerName">Learner</strong>
+        <span id="removeLearnerEmail">Email</span>
+      </div>
+
+      <div class="remove-learner-warning">
+        This will remove the selected learner(s) from this class and delete their saved study and quiz progress for this class.
+        They can join again later if they still have an active class link.
+      </div>
+
+      <div class="modal-actions">
+        <button id="confirmRemoveLearnerBtn" class="danger-btn" type="button">Remove Learner</button>
+        <button class="secondary-btn" data-close-modal type="button">Cancel</button>
+      </div>
+    </div>
+
     <div id="newClassModal" class="modal hidden">
       <div class="modal-head">
         <div>
@@ -411,13 +553,8 @@
         <label for="editClassPublished">Enable class sharing</label>
       </div>
 
-      <div class="archive-explainer">
-        Archiving removes this class from your normal class list and hides it from students, but keeps all decks and cards available for copying later.
-      </div>
-
       <div class="modal-actions">
         <button id="saveClassBtn" class="primary-btn">Save Changes</button>
-        <button id="archiveClassBtn" class="archive-btn">Archive Class</button>
         <button class="secondary-btn" data-close-modal>Cancel</button>
       </div>
     </div>
@@ -463,25 +600,38 @@
       <div class="modal-head">
         <div>
           <span class="eyebrow">Study setup</span>
-          <h2>Choose card order</h2>
+          <h2>Choose how to study</h2>
         </div>
         <button class="modal-close" data-close-modal>×</button>
       </div>
 
       <p id="studyOrderTarget" class="study-order-target"></p>
 
-      <div class="study-order-grid">
-        <button id="progressiveOrderBtn" class="study-order-option">
-          <span class="study-order-icon">1→2→3</span>
-          <strong>Progressive</strong>
-          <small>Study cards in their normal order.</small>
-        </button>
+      <div class="study-direction-section">
+        <strong>Card direction</strong>
+        <div class="study-direction-segmented" role="group" aria-label="Card direction">
+          <button type="button" class="study-direction-btn active" data-study-direction="frontBack">Front → Back</button>
+          <button type="button" class="study-direction-btn" data-study-direction="backFront">Back → Front</button>
+          <button type="button" class="study-direction-btn" data-study-direction="mixed">Mixed</button>
+        </div>
+        <small>Mixed randomly chooses the direction for each card.</small>
+      </div>
 
-        <button id="randomOrderBtn" class="study-order-option">
-          <span class="study-order-icon">↝</span>
-          <strong>Random</strong>
-          <small>Shuffle the cards into a new order.</small>
-        </button>
+      <div class="study-order-section">
+        <strong>Card order</strong>
+        <div class="study-order-grid">
+          <button id="progressiveOrderBtn" class="study-order-option">
+            <span class="study-order-icon">1→2→3</span>
+            <strong>Progressive</strong>
+            <small>Study cards in their normal order.</small>
+          </button>
+
+          <button id="randomOrderBtn" class="study-order-option">
+            <span class="study-order-icon">↝</span>
+            <strong>Random</strong>
+            <small>Shuffle the cards into a new order.</small>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -495,6 +645,17 @@
       </div>
 
       <p id="quizSetupTarget" class="study-order-target"></p>
+
+      <div id="quizDefaultControls" class="quiz-default-controls hidden">
+        <div class="quiz-default-copy">
+          <strong>My quiz default</strong>
+          <small id="quizDefaultStatus">No custom default saved yet.</small>
+        </div>
+        <div class="quiz-default-actions">
+          <button id="saveQuizDefaultBtn" class="secondary-btn quiz-save-default-btn" type="button">Save as My Default</button>
+          <button id="resetQuizDefaultBtn" class="secondary-btn" type="button">Reset Default</button>
+        </div>
+      </div>
 
       <div class="quiz-setup-section">
         <strong>Question wording</strong>
@@ -533,10 +694,54 @@
       </div>
 
       <div class="quiz-setup-section">
+        <strong>Feedback timing</strong>
+        <div class="quiz-segmented quiz-feedback-timing" data-quiz-setting="feedbackMode">
+          <button class="quiz-setting-btn active" data-value="immediate">After Each Question</button>
+          <button class="quiz-setting-btn" data-value="end">At the End</button>
+        </div>
+        <small class="quiz-setting-help">Use After Each Question for practice. Use At the End for a more test-like quiz.</small>
+      </div>
+
+      <div class="quiz-setup-section">
         <strong>Question order</strong>
         <div class="quiz-segmented" data-quiz-setting="order">
           <button class="quiz-setting-btn active" data-value="progressive">Progressive</button>
           <button class="quiz-setting-btn" data-value="random">Random</button>
+        </div>
+      </div>
+
+      <div class="quiz-setup-section">
+        <strong>Questions to include</strong>
+
+        <div class="quiz-segmented quiz-inclusion-segmented" data-quiz-setting="inclusionMode">
+          <button class="quiz-setting-btn active" data-value="count">Choose Number</button>
+          <button class="quiz-setting-btn" data-value="manual">Pick Manually</button>
+        </div>
+
+        <div id="quizCountModePanel" class="quiz-inclusion-panel">
+          <div class="quiz-count-control">
+            <label class="quiz-count-field">
+              Number of questions
+              <input id="quizQuestionCountInput" type="number" min="1" step="1" value="1" inputmode="numeric" />
+            </label>
+            <button id="quizUseAllQuestionsBtn" class="secondary-btn quiz-use-all-btn" type="button">Use All</button>
+          </div>
+          <small id="quizQuestionCountHelp" class="quiz-count-help"></small>
+        </div>
+
+        <div id="quizManualModePanel" class="quiz-inclusion-panel quiz-manual-picker hidden">
+          <div class="quiz-manual-toolbar">
+            <div>
+              <strong id="quizManualSelectionCount">0 selected</strong>
+              <small>Choose the exact flashcards you want in this quiz.</small>
+            </div>
+            <div class="quiz-manual-actions">
+              <button id="quizManualSelectAllBtn" class="secondary-btn" type="button">Select All</button>
+              <button id="quizManualClearBtn" class="secondary-btn" type="button">Clear</button>
+            </div>
+          </div>
+          <div id="quizManualCardList" class="quiz-manual-card-list"></div>
+          <small class="quiz-count-help">Only checked cards will become quiz questions. Google Forms export uses the same selection.</small>
         </div>
       </div>
 
@@ -552,17 +757,52 @@
 
         <button id="exportGoogleFormsBtn" class="google-forms-btn hidden" type="button">
           <span class="google-forms-icon">G</span>
-          Download Google Forms Script (.gs)
+          Generate Google Forms Script
         </button>
       </div>
 
-      <div id="googleFormsExportResult" class="google-forms-result hidden"></div>
+      <div id="googleFormsExportResult" class="google-forms-result hidden">
+        <div class="google-forms-generated-head">
+          <div>
+            <strong>Google Forms Script Ready</strong>
+            <small id="googleFormsGeneratedSummary">Choose Copy Script or Download .gs.</small>
+          </div>
+          <div class="google-forms-generated-actions">
+            <button id="copyGoogleFormsScriptBtn" class="secondary-btn" type="button">Copy Script</button>
+            <button id="downloadGoogleFormsScriptBtn" class="google-forms-download-btn" type="button">Download .gs</button>
+          </div>
+        </div>
+        <textarea id="googleFormsScriptPreview" class="google-forms-script-preview" readonly spellcheck="false" aria-label="Generated Google Forms Apps Script"></textarea>
+      </div>
 
       <p id="googleFormsExportStatus" class="google-forms-status" aria-live="polite"></p>
 
       <div class="modal-actions">
         <button id="startQuizBtn" class="primary-btn">Start Quiz</button>
         <button class="secondary-btn" data-close-modal>Cancel</button>
+      </div>
+    </div>
+
+    <div id="deckListModal" class="modal deck-list-modal hidden">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">Deck list</span>
+          <h2 id="deckListTitle">Deck</h2>
+          <small id="deckListCount" class="deck-list-count">0 cards</small>
+        </div>
+        <button class="modal-close" data-close-modal aria-label="Close deck list">×</button>
+      </div>
+
+      <div class="deck-list-heading" aria-hidden="true">
+        <span>#</span>
+        <span>Front</span>
+        <span></span>
+        <span>Back</span>
+      </div>
+      <div id="deckListRows" class="deck-list-rows"></div>
+
+      <div class="modal-actions">
+        <button class="secondary-btn" data-close-modal type="button">Close</button>
       </div>
     </div>
 
@@ -707,6 +947,19 @@
     </div>
   </div>
 
-  <script type="module" src="flashcards-app.js?v=20260923-auth-isolation-2"></script>
+  <aside class="creator-credit" id="flashcardsCreatorCredit" aria-label="Website creator">
+    <button class="creator-credit-close" id="dismissFlashcardsCreatorCredit" type="button" aria-label="Hide creator badge" title="Hide creator badge">×</button>
+    <img src="creator-ehthar.png?v=20260910-6" alt="Ehthar Htain (Aung Naing)" />
+    <span>Created by<strong>Ehthar Htain (Aung Naing)</strong></span>
+  </aside>
+  <script>
+    (() => {
+      const badge = document.querySelector('#flashcardsCreatorCredit');
+      const closeButton = document.querySelector('#dismissFlashcardsCreatorCredit');
+      if (!badge || !closeButton) return;
+      closeButton.addEventListener('click', () => badge.classList.add('is-dismissed'));
+    })();
+  </script>
+  <script type="module" src="flashcards-app.js?v=20260924-guest-study-1"></script>
 </body>
 </html>

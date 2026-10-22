@@ -2,6 +2,7 @@ import { firebaseConfig } from "./flashcards-firebase-config.js";
 
 const FIREBASE_VERSION = "12.19.0";
 const THEME_KEY = "flashcards_brainscape_theme";
+const QUIZ_DEFAULTS_KEY_PREFIX = "flashcards_quiz_defaults_v1";
 const EMBEDDED_CLASSROOM_MODE = new URLSearchParams(window.location.search).get("embedded") === "classroom";
 
 const [appModule, authModule, firestoreModule] = await Promise.all([
@@ -14,10 +15,11 @@ const { initializeApp } = appModule;
 const {
   getAuth,
   initializeAuth,
-  inMemoryPersistence,
+  browserLocalPersistence,
   browserPopupRedirectResolver,
   GoogleAuthProvider,
   signInWithPopup,
+  signInAnonymously,
   signOut,
   onAuthStateChanged
 } = authModule;
@@ -34,6 +36,7 @@ const {
   getDocs,
   query,
   where,
+  writeBatch,
   serverTimestamp
 } = firestoreModule;
 
@@ -46,17 +49,28 @@ const state = {
   archivedClasses: [],
   archivedDecks: [],
   sharedClasses: [],
+  sidebarClassOrder: [],
+  sidebarMenuClassId: null,
+  sidebarShareClassId: null,
+  sidebarDraggedClassId: null,
+  draggedDeckId: null,
   selectedClass: null,
+  learners: [],
+  selectedLearnerIds: new Set(),
+  pendingLearnerRemoval: null,
   decks: [],
   progressMap: new Map(),
   selectedDeck: null,
   editingDeckId: null,
+  selectedStudyDeckIds: new Set(),
+  studySelectionDeckIds: [],
   studyMode: "standard",
   studyScope: "deck",
   sessionCards: [],
   sessionIndex: 0,
   sessionRatings: [],
   studyOrder: "progressive",
+  studyDirection: "frontBack",
   pendingStudy: null,
   pendingQuiz: null,
   quizConfig: {
@@ -64,14 +78,23 @@ const state = {
     template: "What is the answer for {term}?",
     direction: "frontBack",
     answerMode: "multiple",
+    feedbackMode: "immediate",
     order: "progressive",
+    inclusionMode: "count",
+    questionCount: 0,
+    questionCountMode: "all",
+    manualCardKeys: [],
     points: 1
   },
   quizQuestions: [],
+  quizOriginalQuestions: [],
   quizIndex: 0,
   quizScore: 0,
   quizResults: [],
   quizAnswered: false,
+  generatedGoogleFormsScript: "",
+  generatedGoogleFormsFileName: "",
+  generatedGoogleFormsQuestionCount: 0,
   copyCardsDestinationDeckId: null,
   copySourceDecks: [],
   copySourceCards: []
@@ -111,6 +134,12 @@ function showTopView(id) {
 function showPanel(id) {
   document.querySelectorAll(".panel-view").forEach(v => v.classList.add("hidden"));
   document.getElementById(id)?.classList.remove("hidden");
+
+  if (id === "classView" && state.selectedClass?.name) {
+    applyClassDocumentTitle(state.selectedClass.name);
+  } else if (!["studyView", "quizView", "quizCompleteView", "completeView"].includes(id)) {
+    setShareMetadataTitle("Flashcards");
+  }
 }
 
 function escapeHtml(value = "") {
@@ -170,22 +199,435 @@ function classParam() {
   return new URL(window.location.href).searchParams.get("class");
 }
 
-function buildClassShareLink(classId) {
+function classNameParam() {
+  return new URL(window.location.href).searchParams.get("name") || "";
+}
+
+function cleanShareTitle(value = "") {
+  return String(value || "").replace(/\s+/g, " ").trim().slice(0, 120);
+}
+
+function setShareMetadataTitle(title = "Flashcards") {
+  const clean = cleanShareTitle(title) || "Flashcards";
+  document.title = clean;
+
+  const ensureMeta = (selector, attr, key) => {
+    let meta = document.head.querySelector(selector);
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.setAttribute(attr, key);
+      document.head.appendChild(meta);
+    }
+    meta.setAttribute("content", clean);
+  };
+
+  ensureMeta('meta[property="og:title"]', "property", "og:title");
+  ensureMeta('meta[name="twitter:title"]', "name", "twitter:title");
+}
+
+const sharedClassNameFromLink = classNameParam();
+if (sharedClassNameFromLink) setShareMetadataTitle(sharedClassNameFromLink);
+
+function buildClassShareLink(classId, displayName = "") {
   const url = new URL(window.location.href);
   url.search = "";
   url.hash = "";
   url.searchParams.set("class", classId);
+  const name = cleanShareTitle(displayName);
+  if (name) url.searchParams.set("name", name);
   return url.toString();
+}
+
+function classShareTitle(className = "") {
+  const name = String(className || "").trim();
+  return name ? `${name} — Flashcards` : "Flashcards";
+}
+
+function applyClassDocumentTitle(className = "") {
+  const linkedName = classNameParam();
+  setShareMetadataTitle(linkedName || classShareTitle(className));
+}
+
+function savedLinkPreviewTitle(c = state.selectedClass) {
+  return cleanShareTitle(c?.linkPreviewTitle || "");
+}
+
+function linkPreviewTitleFor(c = state.selectedClass) {
+  const input = document.getElementById("linkPreviewTitleInput");
+  const typed = cleanShareTitle(input?.value || "");
+  return typed || savedLinkPreviewTitle(c) || cleanShareTitle(c?.name || "") || "Flashcards";
+}
+
+function syncLinkPreviewTitleUi() {
+  const c = state.selectedClass;
+  const input = document.getElementById("linkPreviewTitleInput");
+  const status = document.getElementById("linkPreviewTitleStatus");
+  if (!c || !input) return;
+
+  const saved = savedLinkPreviewTitle(c);
+  input.value = saved || cleanShareTitle(c.name);
+  if (status) {
+    status.textContent = saved
+      ? "Custom link display name saved for this class."
+      : "Using the class name automatically. Type a different name to change the &name= part of the copied link.";
+  }
+}
+
+async function saveLinkPreviewTitle() {
+  if (!isOwner() || !state.selectedClass) return;
+  const input = document.getElementById("linkPreviewTitleInput");
+  const status = document.getElementById("linkPreviewTitleStatus");
+  const title = cleanShareTitle(input?.value || "");
+
+  if (!title) {
+    showMessage("Enter a link display name.", "error");
+    input?.focus();
+    return;
+  }
+
+  try {
+    await updateDoc(doc(state.db, "classes", state.selectedClass.id), {
+      linkPreviewTitle: title,
+      updatedAt: serverTimestamp()
+    });
+    state.selectedClass = { ...state.selectedClass, linkPreviewTitle: title };
+    const owned = state.ownedClasses.find(c => c.id === state.selectedClass.id);
+    if (owned) owned.linkPreviewTitle = title;
+    if (status) status.textContent = "Custom link display name saved for this class.";
+    await renderGoogleClassroomShare();
+    showMessage("Link display name saved.", "success");
+  } catch (err) {
+    handleFirebaseError(err, "Could not save the pasted-link title.");
+  }
+}
+
+async function useClassNameForLinkPreview() {
+  if (!isOwner() || !state.selectedClass) return;
+  const input = document.getElementById("linkPreviewTitleInput");
+  const status = document.getElementById("linkPreviewTitleStatus");
+
+  try {
+    await updateDoc(doc(state.db, "classes", state.selectedClass.id), {
+      linkPreviewTitle: "",
+      updatedAt: serverTimestamp()
+    });
+    state.selectedClass = { ...state.selectedClass, linkPreviewTitle: "" };
+    const owned = state.ownedClasses.find(c => c.id === state.selectedClass.id);
+    if (owned) owned.linkPreviewTitle = "";
+    if (input) input.value = cleanShareTitle(state.selectedClass.name);
+    if (status) status.textContent = "Using the class name automatically. Type a different name to change the &name= part of the copied link.";
+    await renderGoogleClassroomShare();
+    showMessage("Pasted links will use the class name.", "success");
+  } catch (err) {
+    handleFirebaseError(err, "Could not reset the pasted-link title.");
+  }
+}
+
+function savedClassroomShareTitle(c = state.selectedClass) {
+  return String(c?.classroomShareTitle || "").replace(/\s+/g, " ").trim();
+}
+
+function classroomShareTitleFor(c = state.selectedClass) {
+  const input = document.getElementById("classroomShareTitleInput");
+  const typed = String(input?.value || "").replace(/\s+/g, " ").trim();
+  return typed || savedClassroomShareTitle(c) || classShareTitle(c?.name || "");
+}
+
+function syncClassroomShareTitleUi() {
+  const c = state.selectedClass;
+  const input = document.getElementById("classroomShareTitleInput");
+  const status = document.getElementById("classroomShareTitleStatus");
+  if (!c || !input) return;
+
+  const saved = savedClassroomShareTitle(c);
+  input.value = saved || cleanShareTitle(c.name);
+  if (status) {
+    status.textContent = saved
+      ? "Custom title saved for this class."
+      : "Using the class name automatically. Type a different title anytime.";
+  }
+}
+
+let classroomShareRenderTimer = null;
+function scheduleClassroomShareRender() {
+  clearTimeout(classroomShareRenderTimer);
+  classroomShareRenderTimer = setTimeout(() => renderGoogleClassroomShare(), 250);
+}
+
+async function saveClassroomShareTitle() {
+  if (!isOwner() || !state.selectedClass) return;
+  const input = document.getElementById("classroomShareTitleInput");
+  const status = document.getElementById("classroomShareTitleStatus");
+  const title = String(input?.value || "").replace(/\s+/g, " ").trim();
+
+  if (!title) {
+    showMessage("Enter a Google Classroom share title.", "error");
+    input?.focus();
+    return;
+  }
+
+  try {
+    await updateDoc(doc(state.db, "classes", state.selectedClass.id), {
+      classroomShareTitle: title,
+      updatedAt: serverTimestamp()
+    });
+    state.selectedClass = { ...state.selectedClass, classroomShareTitle: title };
+    const owned = state.ownedClasses.find(c => c.id === state.selectedClass.id);
+    if (owned) owned.classroomShareTitle = title;
+    if (status) status.textContent = "Custom title saved for this class.";
+    await renderGoogleClassroomShare();
+    showMessage("Google Classroom share title saved.", "success");
+  } catch (err) {
+    handleFirebaseError(err, "Could not save the Google Classroom share title.");
+  }
+}
+
+async function useClassNameForClassroomShare() {
+  if (!isOwner() || !state.selectedClass) return;
+  const input = document.getElementById("classroomShareTitleInput");
+  const status = document.getElementById("classroomShareTitleStatus");
+
+  try {
+    await updateDoc(doc(state.db, "classes", state.selectedClass.id), {
+      classroomShareTitle: "",
+      updatedAt: serverTimestamp()
+    });
+    state.selectedClass = { ...state.selectedClass, classroomShareTitle: "" };
+    const owned = state.ownedClasses.find(c => c.id === state.selectedClass.id);
+    if (owned) owned.classroomShareTitle = "";
+    if (input) input.value = classShareTitle(state.selectedClass.name);
+    if (status) status.textContent = "Using the class name automatically. Type a different title anytime.";
+    await renderGoogleClassroomShare();
+    showMessage("Google Classroom will use the class name.", "success");
+  } catch (err) {
+    handleFirebaseError(err, "Could not reset the Google Classroom share title.");
+  }
+}
+
+let classroomShareApiPromise = null;
+
+function loadClassroomShareApi() {
+  if (window.gapi?.sharetoclassroom?.render) return Promise.resolve(window.gapi.sharetoclassroom);
+  if (classroomShareApiPromise) return classroomShareApiPromise;
+
+  classroomShareApiPromise = new Promise((resolve, reject) => {
+    window.___gcfg = { ...(window.___gcfg || {}), parsetags: "explicit" };
+
+    const finish = () => {
+      let tries = 0;
+      const waitForApi = () => {
+        if (window.gapi?.sharetoclassroom?.render) {
+          resolve(window.gapi.sharetoclassroom);
+          return;
+        }
+        tries += 1;
+        if (tries > 50) {
+          classroomShareApiPromise = null;
+          reject(new Error("Google Classroom share button did not load."));
+          return;
+        }
+        setTimeout(waitForApi, 100);
+      };
+      waitForApi();
+    };
+
+    const existing = document.querySelector('script[data-gln-classroom-share="1"]');
+    if (existing) {
+      if (window.gapi?.sharetoclassroom?.render) resolve(window.gapi.sharetoclassroom);
+      else existing.addEventListener("load", finish, { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://apis.google.com/js/platform.js";
+    script.async = true;
+    script.defer = true;
+    script.dataset.glnClassroomShare = "1";
+    script.addEventListener("load", finish, { once: true });
+    script.addEventListener("error", () => {
+      classroomShareApiPromise = null;
+      reject(new Error("Could not load Google Classroom sharing."));
+    }, { once: true });
+    document.head.appendChild(script);
+  });
+
+  return classroomShareApiPromise;
+}
+
+async function renderGoogleClassroomShare() {
+  const wrap = document.getElementById("classroomShareAction");
+  const host = document.getElementById("classroomShareWidget");
+  const c = state.selectedClass;
+  const visible = Boolean(c && isOwner() && c.published !== false);
+
+  wrap?.classList.toggle("hidden", !visible);
+  if (!visible || !host) return;
+
+  host.replaceChildren();
+
+  try {
+    const shareApi = await loadClassroomShareApi();
+    if (!state.selectedClass || state.selectedClass.id !== c.id || !isOwner() || state.selectedClass.published === false) return;
+
+    shareApi.render(host, {
+      url: buildClassShareLink(c.id, linkPreviewTitleFor(c)),
+      title: classroomShareTitleFor(c),
+      body: `Study the flashcards for ${c.name}.`,
+      itemtype: "material",
+      size: "32",
+      theme: "classic"
+    });
+  } catch (err) {
+    wrap?.classList.add("classroom-share-unavailable");
+    host.textContent = "Unavailable";
+  }
 }
 
 function clearClassParam() {
   const url = new URL(window.location.href);
   url.searchParams.delete("class");
+  url.searchParams.delete("name");
+  url.searchParams.delete("preview"); // remove legacy pasted-link preview parameter if present
   history.replaceState({}, "", url);
 }
 
 function isOwner() {
   return Boolean(state.selectedClass && state.user && state.selectedClass.ownerId === state.user.uid);
+}
+
+function quizDefaultsStorageKey() {
+  const uid = String(state.user?.uid || "teacher");
+  return `${QUIZ_DEFAULTS_KEY_PREFIX}:${uid}`;
+}
+
+function readQuizDefaults() {
+  if (!isOwner()) return null;
+
+  try {
+    const raw = localStorage.getItem(quizDefaultsStorageKey());
+    if (!raw) return null;
+
+    const saved = JSON.parse(raw);
+    if (!saved || typeof saved !== "object") return null;
+
+    const allowed = {
+      questionStyle: new Set(["standard", "custom"]),
+      direction: new Set(["frontBack", "backFront", "mixed"]),
+      answerMode: new Set(["multiple", "typed", "mixed"]),
+      feedbackMode: new Set(["immediate", "end"]),
+      order: new Set(["progressive", "random"]),
+      inclusionMode: new Set(["count", "manual"]),
+      questionCountMode: new Set(["all", "fixed"])
+    };
+
+    const defaults = {
+      questionStyle: allowed.questionStyle.has(saved.questionStyle) ? saved.questionStyle : "standard",
+      template: typeof saved.template === "string" && saved.template.trim()
+        ? saved.template.trim()
+        : "What is the answer for {term}?",
+      direction: allowed.direction.has(saved.direction) ? saved.direction : "frontBack",
+      answerMode: allowed.answerMode.has(saved.answerMode) ? saved.answerMode : "multiple",
+      feedbackMode: allowed.feedbackMode.has(saved.feedbackMode) ? saved.feedbackMode : "immediate",
+      order: allowed.order.has(saved.order) ? saved.order : "progressive",
+      inclusionMode: allowed.inclusionMode.has(saved.inclusionMode) ? saved.inclusionMode : "count",
+      questionCountMode: allowed.questionCountMode.has(saved.questionCountMode)
+        ? saved.questionCountMode
+        : "fixed",
+      questionCount: Math.max(1, Math.floor(Number(saved.questionCount) || 1)),
+      points: Math.max(0, Math.min(100, Number(saved.points ?? 1)))
+    };
+
+    return defaults;
+  } catch (err) {
+    console.warn("Could not read quiz defaults", err);
+    return null;
+  }
+}
+
+function updateQuizDefaultControls(hasSavedDefault = Boolean(readQuizDefaults())) {
+  const controls = document.getElementById("quizDefaultControls");
+  const status = document.getElementById("quizDefaultStatus");
+  const resetButton = document.getElementById("resetQuizDefaultBtn");
+  if (!controls) return;
+
+  controls.classList.toggle("hidden", !isOwner());
+  if (!isOwner()) return;
+
+  if (status) {
+    status.textContent = hasSavedDefault
+      ? "Your saved quiz setup loads automatically on this device."
+      : "No custom default saved yet. The built-in quiz setup is being used.";
+  }
+  if (resetButton) resetButton.disabled = !hasSavedDefault;
+}
+
+function saveQuizDefaults() {
+  if (!isOwner()) return;
+
+  syncQuizSetupInputs();
+
+  if (state.quizConfig.questionStyle === "custom") {
+    if (!state.quizConfig.template || !state.quizConfig.template.includes("{term}")) {
+      showMessage('Custom questions must include {term} before saving a default.', "error");
+      return;
+    }
+  }
+
+  const payload = {
+    questionStyle: state.quizConfig.questionStyle,
+    template: state.quizConfig.template || "What is the answer for {term}?",
+    direction: state.quizConfig.direction,
+    answerMode: state.quizConfig.answerMode,
+    feedbackMode: state.quizConfig.feedbackMode || "immediate",
+    order: state.quizConfig.order,
+    inclusionMode: state.quizConfig.inclusionMode,
+    questionCountMode: state.quizConfig.questionCountMode || "fixed",
+    questionCount: Math.max(1, Math.floor(Number(state.quizConfig.questionCount) || 1)),
+    points: Math.max(0, Math.min(100, Number(state.quizConfig.points ?? 1)))
+  };
+
+  try {
+    localStorage.setItem(quizDefaultsStorageKey(), JSON.stringify(payload));
+    updateQuizDefaultControls(true);
+    showMessage("Quiz setup saved as your default.", "success");
+  } catch (err) {
+    console.warn("Could not save quiz defaults", err);
+    showMessage("This browser could not save your quiz default.", "error");
+  }
+}
+
+function resetQuizDefaults() {
+  if (!isOwner()) return;
+
+  try {
+    localStorage.removeItem(quizDefaultsStorageKey());
+    updateQuizDefaultControls(false);
+    showMessage("Quiz default reset. Built-in settings will be used next time.", "success");
+  } catch (err) {
+    console.warn("Could not reset quiz defaults", err);
+    showMessage("This browser could not reset your quiz default.", "error");
+  }
+}
+
+function isGuestStudent() {
+  return Boolean(state.user?.isAnonymous);
+}
+
+function guestStudentName() {
+  if (!isGuestStudent()) return state.user?.displayName || "";
+  const suffix = String(state.user?.uid || "guest").slice(-4).toUpperCase();
+  return `Guest ${suffix}`;
+}
+
+function applyGuestStudyUi() {
+  const guest = isGuestStudent();
+  document.body.classList.toggle("guest-study-mode", guest);
+
+  const name = document.getElementById("sidebarName");
+  if (guest && name) name.textContent = "Guest Student";
+
+  const signOutButton = document.getElementById("signOutBtn");
+  if (signOutButton) signOutButton.textContent = guest ? "Exit Guest Study" : "Sign out";
 }
 
 function progressDocId(classId, deckId, studentId) {
@@ -276,16 +718,18 @@ async function signInGoogle() {
 
 async function ensureUserProfile() {
   await setDoc(doc(state.db, "users", state.user.uid), {
-    displayName: state.user.displayName || "",
+    displayName: isGuestStudent() ? guestStudentName() : (state.user.displayName || ""),
     email: state.user.email || "",
     photoURL: state.user.photoURL || "",
+    guest: isGuestStudent(),
     updatedAt: serverTimestamp()
   }, { merge: true });
 }
 
 function renderUser() {
-  document.getElementById("sidebarName").textContent =
-    state.user.displayName?.split(" ")[0] || state.user.email || "User";
+  document.getElementById("sidebarName").textContent = isGuestStudent()
+    ? "Guest Student"
+    : (state.user.displayName?.split(" ")[0] || state.user.email || "User");
 
   const photo = document.getElementById("sidebarPhoto");
   if (state.user.photoURL) {
@@ -297,30 +741,47 @@ function renderUser() {
 }
 
 async function routeAfterAuth() {
-  if (!state.user) {
-    const inviteId = classParam();
+  const inviteId = classParam();
 
+  if (!state.user) {
     if (inviteId) {
       try {
         const snap = await getDoc(doc(state.db, "classes", inviteId));
         if (snap.exists() && snap.data().published === true) {
           document.getElementById("sharedClassSignInTitle").textContent =
-            snap.data().name || "A class was shared with you.";
+            snap.data().name || "Opening shared class…";
           showTopView("sharedSignInView");
+          await signInAnonymously(state.auth);
           return;
         }
-      } catch (_) {}
+      } catch (err) {
+        console.error(err);
+        showTopView("loginView");
+        showMessage(
+          "Guest study could not start. Make sure Anonymous sign-in is enabled in Firebase Authentication.",
+          "error",
+          0
+        );
+        return;
+      }
     }
 
     showTopView("loginView");
     return;
   }
 
+  // Anonymous accounts exist only to let students study from a shared link.
+  // If a guest reaches the regular Flashcards home page, return to teacher sign-in.
+  if (isGuestStudent() && !inviteId) {
+    await signOut(state.auth);
+    return;
+  }
+
   await ensureUserProfile();
   renderUser();
+  applyGuestStudyUi();
   showTopView("appView");
 
-  const inviteId = classParam();
   if (inviteId) {
     await acceptSharedClass(inviteId);
     return;
@@ -331,9 +792,335 @@ async function routeAfterAuth() {
 }
 
 async function loadLibrary() {
-  await Promise.all([loadOwnedClasses(), loadSharedClasses(), loadSidebarStats()]);
+  await Promise.all([
+    loadOwnedClasses(),
+    loadSharedClasses(),
+    loadSidebarStats(),
+    loadSidebarClassOrder()
+  ]);
+  await normalizeSidebarClassOrder();
   renderSidebar();
   renderLibrary();
+}
+
+async function loadSidebarClassOrder() {
+  try {
+    const snap = await getDoc(doc(state.db, "users", state.user.uid));
+    const saved = snap.exists() ? snap.data().sidebarClassOrder : [];
+    state.sidebarClassOrder = Array.isArray(saved)
+      ? saved.filter(id => typeof id === "string" && id)
+      : [];
+  } catch (err) {
+    console.warn("Could not load sidebar class order.", err);
+    state.sidebarClassOrder = [];
+  }
+}
+
+function sidebarClassesInSavedOrder() {
+  const classes = [...state.ownedClasses, ...state.sharedClasses];
+  const byId = new Map(classes.map(c => [c.id, c]));
+  const ordered = [];
+
+  for (const id of state.sidebarClassOrder) {
+    const c = byId.get(id);
+    if (!c) continue;
+    ordered.push(c);
+    byId.delete(id);
+  }
+
+  const remaining = [...byId.values()].sort((a, b) =>
+    String(a.name).localeCompare(String(b.name))
+  );
+
+  return [...ordered, ...remaining];
+}
+
+async function normalizeSidebarClassOrder() {
+  const normalized = sidebarClassesInSavedOrder().map(c => c.id);
+  const changed =
+    normalized.length !== state.sidebarClassOrder.length ||
+    normalized.some((id, index) => id !== state.sidebarClassOrder[index]);
+
+  state.sidebarClassOrder = normalized;
+  if (!changed || !state.user) return;
+
+  try {
+    await setDoc(doc(state.db, "users", state.user.uid), {
+      sidebarClassOrder: normalized,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+  } catch (err) {
+    console.warn("Could not normalize sidebar class order.", err);
+  }
+}
+
+async function saveSidebarClassOrder(ids) {
+  state.sidebarClassOrder = [...ids];
+  renderSidebar();
+
+  try {
+    await setDoc(doc(state.db, "users", state.user.uid), {
+      sidebarClassOrder: ids,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+  } catch (err) {
+    console.error(err);
+    showMessage("Could not save the class order.", "error");
+    await loadSidebarClassOrder();
+    renderSidebar();
+  }
+}
+
+async function reorderSidebarClass(draggedId, targetId, placeAfter = false) {
+  if (!draggedId || !targetId || draggedId === targetId) return;
+
+  const ids = sidebarClassesInSavedOrder().map(c => c.id);
+  const from = ids.indexOf(draggedId);
+  if (from < 0) return;
+
+  ids.splice(from, 1);
+  let targetIndex = ids.indexOf(targetId);
+  if (targetIndex < 0) return;
+  if (placeAfter) targetIndex += 1;
+  ids.splice(targetIndex, 0, draggedId);
+
+  await saveSidebarClassOrder(ids);
+}
+
+function clearSidebarDragMarkers() {
+  document.querySelectorAll(".sidebar-class-row").forEach(row => {
+    row.classList.remove("dragging", "drag-over-before", "drag-over-after");
+  });
+}
+
+function sidebarClassById(classId) {
+  return [...state.ownedClasses, ...state.sharedClasses, ...state.archivedClasses]
+    .find(c => c.id === classId) || null;
+}
+
+function closeSidebarClassMenu() {
+  const menu = document.getElementById("sidebarClassMenu");
+  if (menu) menu.hidden = true;
+  state.sidebarMenuClassId = null;
+}
+
+function openSidebarClassMenu(button, classId) {
+  const menu = document.getElementById("sidebarClassMenu");
+  const c = sidebarClassById(classId);
+  if (!menu || !c) return;
+
+  state.sidebarMenuClassId = classId;
+  const owned = c.ownerId === state.user?.uid;
+
+  menu.querySelectorAll("[data-owner-only]").forEach(el => {
+    el.hidden = !owned;
+  });
+
+  menu.hidden = false;
+  menu.style.left = "0px";
+  menu.style.top = "0px";
+
+  const rect = button.getBoundingClientRect();
+  const menuRect = menu.getBoundingClientRect();
+  const gap = 6;
+  const left = Math.max(8, Math.min(
+    window.innerWidth - menuRect.width - 8,
+    rect.right - menuRect.width
+  ));
+  const topBelow = rect.bottom + gap;
+  const top = topBelow + menuRect.height <= window.innerHeight - 8
+    ? topBelow
+    : Math.max(8, rect.top - menuRect.height - gap);
+
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+}
+
+function sidebarShareClass() {
+  return sidebarClassById(state.sidebarShareClassId);
+}
+
+function syncSidebarShareModal() {
+  const c = sidebarShareClass();
+  if (!c) return;
+
+  const input = document.getElementById("sidebarShareLinkNameInput");
+  const className = document.getElementById("sidebarShareClassName");
+  const urlPreview = document.getElementById("sidebarShareUrlPreview");
+  const status = document.getElementById("sidebarShareStatus");
+  const saveBtn = document.getElementById("sidebarShareSaveNameBtn");
+  const copyBtn = document.getElementById("sidebarShareCopyLinkBtn");
+
+  const saved = savedLinkPreviewTitle(c);
+  const displayName = cleanShareTitle(input?.value || "") || saved || cleanShareTitle(c.name);
+
+  if (className) className.textContent = c.name || "Class";
+  if (urlPreview) urlPreview.value = buildClassShareLink(c.id, displayName);
+  if (saveBtn) saveBtn.hidden = c.ownerId !== state.user?.uid;
+
+  const ownerPrivate = c.ownerId === state.user?.uid && !c.published;
+  if (copyBtn) copyBtn.disabled = ownerPrivate;
+
+  if (status) {
+    status.textContent = ownerPrivate
+      ? "Class sharing is off. Open the class settings and enable sharing before copying a student link."
+      : c.ownerId === state.user?.uid
+        ? (saved
+            ? "This class has a saved custom link display name. You can change it or use the class name."
+            : "The copied link currently uses the class name. Type a different display name if you want.")
+        : "You can customize the display name for the link you copy. This does not rename the class.";
+  }
+}
+
+function openSidebarShareModal(classId) {
+  const c = sidebarClassById(classId);
+  if (!c) return;
+
+  state.sidebarShareClassId = classId;
+  const input = document.getElementById("sidebarShareLinkNameInput");
+  if (input) input.value = savedLinkPreviewTitle(c) || cleanShareTitle(c.name);
+  syncSidebarShareModal();
+  openModal("sidebarShareModal");
+  setTimeout(() => input?.focus(), 0);
+}
+
+async function saveSidebarShareLinkName() {
+  const c = sidebarShareClass();
+  if (!c || c.ownerId !== state.user?.uid) return;
+
+  const input = document.getElementById("sidebarShareLinkNameInput");
+  const title = cleanShareTitle(input?.value || "");
+  if (!title) {
+    showMessage("Enter a link display name.", "error");
+    input?.focus();
+    return;
+  }
+
+  try {
+    await updateDoc(doc(state.db, "classes", c.id), {
+      linkPreviewTitle: title,
+      updatedAt: serverTimestamp()
+    });
+    c.linkPreviewTitle = title;
+    if (state.selectedClass?.id === c.id) {
+      state.selectedClass = { ...state.selectedClass, linkPreviewTitle: title };
+      syncLinkPreviewTitleUi();
+    }
+    syncSidebarShareModal();
+    showMessage("Link display name saved.", "success");
+  } catch (err) {
+    handleFirebaseError(err, "Could not save the link display name.");
+  }
+}
+
+function useClassNameInSidebarShare() {
+  const c = sidebarShareClass();
+  if (!c) return;
+  const input = document.getElementById("sidebarShareLinkNameInput");
+  if (input) input.value = cleanShareTitle(c.name);
+  syncSidebarShareModal();
+}
+
+async function copySidebarShareLink() {
+  const c = sidebarShareClass();
+  if (!c) return;
+
+  const input = document.getElementById("sidebarShareLinkNameInput");
+  const displayName = cleanShareTitle(input?.value || "") || cleanShareTitle(c.name);
+  const link = buildClassShareLink(c.id, displayName);
+
+  try {
+    await navigator.clipboard.writeText(link);
+    showMessage(`Link copied as “${displayName}”.`, "success");
+    const preview = document.getElementById("sidebarShareUrlPreview");
+    if (preview) preview.value = link;
+  } catch (err) {
+    console.error(err);
+    showMessage("Could not copy the class link.", "error");
+  }
+}
+
+async function duplicateClassById(classId) {
+  const source = sidebarClassById(classId);
+  if (!source || source.ownerId !== state.user?.uid) return;
+
+  closeSidebarClassMenu();
+
+  try {
+    const sourceDeckSnap = await getDocs(collection(state.db, "classes", classId, "decks"));
+    const copyName = `${String(source.name || "Class").trim()} Copy`;
+
+    const newClassRef = await addDoc(collection(state.db, "classes"), {
+      name: copyName,
+      intro: source.intro || "",
+      ownerId: state.user.uid,
+      ownerName: state.user.displayName || state.user.email || "Owner",
+      published: false,
+      archived: false,
+      linkPreviewTitle: "",
+      classroomShareTitle: "",
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+
+    for (const deckDoc of sourceDeckSnap.docs) {
+      const data = deckDoc.data();
+      await addDoc(collection(state.db, "classes", newClassRef.id, "decks"), {
+        name: data.name || "Deck",
+        cards: Array.isArray(data.cards) ? data.cards : [],
+        published: data.published !== false,
+        archived: data.archived === true,
+        archivedPublished: data.archivedPublished ?? null,
+        order: Number(data.order ?? 0),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+    }
+
+    await loadLibrary();
+    await openClass(newClassRef.id);
+    showMessage(`Duplicated as “${copyName}”. Sharing is off until you enable it.`, "success");
+  } catch (err) {
+    handleFirebaseError(err, "Could not duplicate the class.");
+  }
+}
+
+async function deleteOwnedClassPermanently(classId) {
+  const c = sidebarClassById(classId);
+  if (!c || c.ownerId !== state.user?.uid) return;
+
+  closeSidebarClassMenu();
+
+  const className = String(c.name || "Untitled Class");
+  const typedName = window.prompt(
+    `Permanently delete "${className}" and every deck and card inside it? This cannot be undone.\n\nType the class name exactly to confirm:`
+  );
+
+  if (typedName === null) return;
+  if (typedName.trim() !== className.trim()) {
+    showMessage("Class name did not match. Nothing was deleted.", "error");
+    return;
+  }
+
+  try {
+    const deckSnap = await getDocs(collection(state.db, "classes", classId, "decks"));
+    for (const deckSnapDoc of deckSnap.docs) {
+      await deleteDoc(deckSnapDoc.ref);
+    }
+    await deleteDoc(doc(state.db, "classes", classId));
+
+    const wasOpen = state.selectedClass?.id === classId;
+    if (wasOpen) {
+      state.selectedClass = null;
+      state.decks = [];
+    }
+
+    await loadLibrary();
+    if (wasOpen) showPanel("libraryView");
+    showMessage(`“${className}” was permanently deleted.`, "success");
+  } catch (err) {
+    handleFirebaseError(err, "Could not permanently delete the class.");
+  }
 }
 
 async function loadOwnedClasses() {
@@ -407,7 +1194,7 @@ async function loadSidebarStats() {
 }
 
 function renderSidebar() {
-  const classes = [...state.ownedClasses, ...state.sharedClasses];
+  const classes = sidebarClassesInSavedOrder();
   const host = document.getElementById("classSidebarList");
 
   if (!classes.length) {
@@ -420,7 +1207,16 @@ function renderSidebar() {
     const owned = c.libraryType === "owned";
 
     return `
-      <div class="sidebar-class-row ${active ? "active" : ""}">
+      <div class="sidebar-class-row ${active ? "active" : ""}" data-sidebar-drop-row="${c.id}">
+        <button
+          class="sidebar-class-drag-handle"
+          data-sidebar-drag-handle="${c.id}"
+          draggable="true"
+          type="button"
+          title="Drag to rearrange ${escapeHtml(c.name)}"
+          aria-label="Drag to rearrange ${escapeHtml(c.name)}"
+        >⠿</button>
+
         <button
           class="sidebar-class-item ${active ? "active" : ""}"
           data-sidebar-class="${c.id}"
@@ -433,17 +1229,14 @@ function renderSidebar() {
           </span>
         </button>
 
-        ${owned ? `
-          <button
-            class="sidebar-class-archive-btn"
-            data-archive-sidebar-class="${c.id}"
-            type="button"
-            title="Archive class"
-            aria-label="Archive ${escapeHtml(c.name)}"
-          >
-            ▣
-          </button>
-        ` : ""}
+        <button
+          class="sidebar-class-menu-btn"
+          data-sidebar-menu-button="${c.id}"
+          type="button"
+          title="Class options"
+          aria-label="Options for ${escapeHtml(c.name)}"
+          aria-haspopup="menu"
+        >⋯</button>
       </div>
     `;
   }).join("");
@@ -552,10 +1345,15 @@ async function acceptSharedClass(classId) {
         addedAt: serverTimestamp()
       }, { merge: true });
 
-      showMessage(`"${c.name}" was added to My Flashcards.`, "success");
+      showMessage(
+        isGuestStudent()
+          ? `Guest study opened for "${c.name}" — no Google sign-in required.`
+          : `"${c.name}" was added to My Flashcards.`,
+        "success"
+      );
     }
 
-    clearClassParam();
+    if (!isGuestStudent()) clearClassParam();
     await loadLibrary();
     await openClass(c.id);
   } catch (err) {
@@ -573,6 +1371,8 @@ async function openClass(classId) {
     }
 
     state.selectedClass = { id: snap.id, ...snap.data() };
+    state.selectedStudyDeckIds.clear();
+    state.studySelectionDeckIds = [];
 
     await Promise.all([loadDecks(), loadCurrentUserProgress()]);
     renderSidebar();
@@ -644,30 +1444,108 @@ function renderClass() {
 
   document.getElementById("editClassBtn").classList.toggle("hidden", !owner);
   document.getElementById("shareClassBtn").classList.toggle("hidden", !owner);
+  document.getElementById("linkPreviewAction").classList.toggle("hidden", !owner);
+  document.getElementById("classroomShareAction").classList.toggle("hidden", !owner || state.selectedClass.published === false);
+  const shareTools = document.getElementById("classShareTools");
+  if (shareTools) {
+    shareTools.classList.toggle("hidden", !owner);
+    if (!owner) shareTools.removeAttribute("open");
+  }
   document.getElementById("ownerDeckTools").classList.toggle("hidden", !owner);
   document.getElementById("editIntroBtn").classList.toggle("hidden", !owner);
   document.getElementById("refreshLearnersBtn").classList.toggle("hidden", !owner);
-  document.getElementById("removeSharedClassBtn").classList.toggle("hidden", owner);
+  document.getElementById("removeSharedClassBtn").classList.toggle("hidden", owner || isGuestStudent());
 
   document.getElementById("shareClassBtn").disabled = owner && !state.selectedClass.published;
   document.getElementById("studyClassBtn").disabled = state.decks.length === 0;
   document.getElementById("quizClassBtn").disabled = state.decks.length === 0;
 
+  applyClassDocumentTitle(state.selectedClass.name);
+  syncLinkPreviewTitleUi();
+  syncClassroomShareTitleUi();
+  renderGoogleClassroomShare();
   renderDeckRows();
 
   // Shared users see only their own learner count conceptually; owner count is loaded on Learners tab.
   document.getElementById("tabLearnerCount").textContent = owner ? "(…)" : "";
 }
 
+async function saveDeckOrder(deckIds) {
+  if (!isOwner() || !state.selectedClass) return;
+
+  const byId = new Map(state.decks.map(deck => [deck.id, deck]));
+  const ordered = deckIds.map(id => byId.get(id)).filter(Boolean);
+
+  // Keep any decks that were not present in deckIds at the end rather than
+  // accidentally dropping them from the local view.
+  for (const deck of state.decks) {
+    if (!deckIds.includes(deck.id)) ordered.push(deck);
+  }
+
+  const changed = ordered.filter((deck, index) => Number(deck.order ?? -1) !== index);
+  state.decks = ordered.map((deck, index) => ({ ...deck, order: index }));
+  renderDeckRows();
+
+  if (!changed.length) return;
+
+  try {
+    const batch = writeBatch(state.db);
+    state.decks.forEach((deck, index) => {
+      batch.update(
+        doc(state.db, "classes", state.selectedClass.id, "decks", deck.id),
+        { order: index, updatedAt: serverTimestamp() }
+      );
+    });
+    await batch.commit();
+    showMessage("Deck order saved.", "success", 2200);
+  } catch (err) {
+    console.error(err);
+    showMessage("Could not save the deck order.", "error");
+    await loadDecks();
+    renderDeckRows();
+  }
+}
+
+async function reorderDeck(draggedId, targetId, placeAfter = false) {
+  if (!isOwner() || !draggedId || !targetId || draggedId === targetId) return;
+
+  const ids = state.decks.map(deck => deck.id);
+  const from = ids.indexOf(draggedId);
+  if (from < 0) return;
+
+  ids.splice(from, 1);
+  let targetIndex = ids.indexOf(targetId);
+  if (targetIndex < 0) return;
+  if (placeAfter) targetIndex += 1;
+  ids.splice(targetIndex, 0, draggedId);
+
+  await saveDeckOrder(ids);
+}
+
+function clearDeckDragMarkers() {
+  document.querySelectorAll(".deck-row").forEach(row => {
+    row.classList.remove("deck-dragging", "deck-drag-over-before", "deck-drag-over-after");
+  });
+}
+
 function renderDeckRows() {
   const host = document.getElementById("deckRows");
   const owner = isOwner();
+
+  // Keep only selections that still exist and contain cards.
+  const studyableIds = new Set(
+    state.decks.filter(deck => (deck.cards?.length || 0) > 0).map(deck => deck.id)
+  );
+  state.selectedStudyDeckIds = new Set(
+    [...state.selectedStudyDeckIds].filter(id => studyableIds.has(id))
+  );
 
   if (!state.decks.length) {
     host.innerHTML = `
       <div class="empty-state">
         ${owner ? "No decks yet. Create the first deck for this class." : "The owner has not added any decks yet."}
       </div>`;
+    updateDeckStudySelectionUi();
     return;
   }
 
@@ -677,21 +1555,44 @@ function renderDeckRows() {
     const uniquePct = total ? Math.min(100, Math.round((s.unique / total) * 100)) : 0;
 
     return `
-      <article class="deck-row">
+      <article class="deck-row" data-deck-drop-row="${deck.id}">
         <div class="deck-percent">
-          <span class="check-circle">✓</span>
+          <div class="deck-reorder-start">
+            ${owner ? `
+              <button
+                class="deck-drag-handle"
+                data-deck-drag-handle="${deck.id}"
+                draggable="true"
+                type="button"
+                title="Drag to rearrange ${escapeHtml(deck.name)}"
+                aria-label="Drag to rearrange ${escapeHtml(deck.name)}"
+              >⠿</button>
+            ` : ""}
+            <span class="check-circle">✓</span>
+          </div>
           <strong>${s.mastery}%</strong>
         </div>
 
         <div class="deck-main">
-          <h3>
-            ${escapeHtml(deck.name)}
-            ${owner ? `
+          <div class="deck-title-row">
+            <label class="deck-study-select" title="Include this deck in a combined study session">
+              <input
+                type="checkbox"
+                data-select-study-deck="${deck.id}"
+                ${state.selectedStudyDeckIds.has(deck.id) ? "checked" : ""}
+                ${total ? "" : "disabled"}
+              />
+              <span aria-hidden="true"></span>
+            </label>
+            <h3>
+              ${escapeHtml(deck.name)}
+              ${owner ? `
               <span class="deck-status-badge ${deck.published === false ? "hidden" : "visible"}">
                 ${deck.published === false ? "Hidden" : "Visible"}
               </span>
             ` : ""}
-          </h3>
+            </h3>
+          </div>
           <div class="deck-progress-copy">
             <span>${s.unique} of ${total} unique cards studied</span>
           </div>
@@ -721,6 +1622,7 @@ function renderDeckRows() {
             </div>
           ` : ""}
           <div class="deck-primary-actions">
+            <button class="deck-list-btn" data-view-deck-list="${deck.id}" title="View all cards">☷ List</button>
             <button class="deck-quiz" data-quiz-deck="${deck.id}" title="Quiz">Quiz ?</button>
             <button class="deck-play" data-study-deck="${deck.id}" title="Study">▶</button>
           </div>
@@ -728,6 +1630,81 @@ function renderDeckRows() {
       </article>
     `;
   }).join("");
+
+  updateDeckStudySelectionUi();
+}
+
+function openDeckList(deckId) {
+  const deck = state.decks.find(item => item.id === deckId);
+  if (!deck) return;
+
+  const cards = Array.isArray(deck.cards) ? deck.cards : [];
+  const title = document.getElementById("deckListTitle");
+  const count = document.getElementById("deckListCount");
+  const host = document.getElementById("deckListRows");
+
+  if (!title || !count || !host) return;
+
+  title.textContent = deck.name || "Deck";
+  count.textContent = `${cards.length} card${cards.length === 1 ? "" : "s"}`;
+
+  host.innerHTML = cards.length
+    ? cards.map((card, index) => `
+        <div class="deck-list-row">
+          <span class="deck-list-number">${index + 1}</span>
+          <div class="deck-list-side">
+            <small>Front</small>
+            <strong>${escapeHtml(card.front ?? "")}</strong>
+          </div>
+          <span class="deck-list-arrow" aria-hidden="true">→</span>
+          <div class="deck-list-side">
+            <small>Back</small>
+            <strong>${escapeHtml(card.back ?? "")}</strong>
+          </div>
+        </div>
+      `).join("")
+    : '<div class="deck-list-empty">This deck does not contain any cards yet.</div>';
+
+  openModal("deckListModal");
+}
+
+function studyableDecks() {
+  return state.decks.filter(deck => (deck.cards?.length || 0) > 0);
+}
+
+function selectedStudyDecks() {
+  const selected = state.selectedStudyDeckIds;
+  return state.decks.filter(deck => selected.has(deck.id) && (deck.cards?.length || 0) > 0);
+}
+
+function updateDeckStudySelectionUi() {
+  const selector = document.getElementById("deckStudySelector");
+  const selectAll = document.getElementById("selectAllStudyDecks");
+  const clearBtn = document.getElementById("clearDeckSelectionBtn");
+  const studyBtn = document.getElementById("studySelectedDecksBtn");
+  const countEl = document.getElementById("selectedDeckCount");
+
+  if (!selector || !selectAll || !clearBtn || !studyBtn || !countEl) return;
+
+  const available = studyableDecks();
+  const selected = selectedStudyDecks();
+  const selectedCards = selected.reduce((sum, deck) => sum + (deck.cards?.length || 0), 0);
+
+  selector.classList.toggle("hidden", state.decks.length < 2);
+
+  selectAll.checked = available.length > 0 && selected.length === available.length;
+  selectAll.indeterminate = selected.length > 0 && selected.length < available.length;
+  selectAll.disabled = available.length === 0;
+  clearBtn.disabled = selected.length === 0;
+  studyBtn.disabled = selected.length === 0;
+
+  countEl.textContent = selected.length
+    ? `${selected.length} selected · ${selectedCards} card${selectedCards === 1 ? "" : "s"}`
+    : "Choose two or more decks to study together";
+
+  studyBtn.textContent = selected.length
+    ? `Study Selected (${selected.length})`
+    : "Study Selected";
 }
 
 function setTab(name) {
@@ -975,24 +1952,16 @@ async function deleteArchivedClassPermanently(classId) {
   );
 
   if (typedName === null) return;
-
   if (typedName.trim() !== className.trim()) {
     showMessage("Class name did not match. Nothing was deleted.", "error");
     return;
   }
 
   try {
-    // Firestore does not automatically delete subcollections when a parent
-    // document is removed, so delete every deck first. Cards are stored in
-    // their deck documents and are removed with those documents.
-    const deckSnap = await getDocs(
-      collection(state.db, "classes", classId, "decks")
-    );
-
+    const deckSnap = await getDocs(collection(state.db, "classes", classId, "decks"));
     for (const deckSnapDoc of deckSnap.docs) {
       await deleteDoc(deckSnapDoc.ref);
     }
-
     await deleteDoc(doc(state.db, "classes", classId));
 
     if (state.selectedClass?.id === classId) {
@@ -1003,7 +1972,6 @@ async function deleteArchivedClassPermanently(classId) {
     await loadLibrary();
     await loadArchivedDecks();
     renderArchiveManager();
-
     showMessage(`"${className}" was permanently deleted.`, "success");
   } catch (err) {
     handleFirebaseError(err, "Could not permanently delete the class.");
@@ -1134,11 +2102,12 @@ async function copyClassLink(classId = state.selectedClass?.id) {
     return;
   }
 
-  const link = buildClassShareLink(classId);
+  const displayName = linkPreviewTitleFor(c);
+  const link = buildClassShareLink(classId, displayName);
 
   try {
     await navigator.clipboard.writeText(link);
-    showMessage("Class link copied. Paste it into Google Classroom.", "success");
+    showMessage(`Class link copied with name “${displayName}”.`, "success");
   } catch {
     window.prompt("Copy this class link:", link);
   }
@@ -1628,6 +2597,8 @@ async function loadLearners() {
   const host = document.getElementById("learnersContent");
 
   if (!isOwner()) {
+    state.learners = [];
+    state.selectedLearnerIds.clear();
     const rows = [];
 
     for (const deck of state.decks) {
@@ -1721,7 +2692,10 @@ async function loadLearners() {
     const learners = [...byStudent.values()]
       .sort((a, b) => String(a.name).localeCompare(String(b.name)));
 
+    state.learners = learners;
     document.getElementById("tabLearnerCount").textContent = `(${learners.length})`;
+
+    state.selectedLearnerIds.clear();
 
     if (!learners.length) {
       host.innerHTML = `<div class="empty-state">No learners have studied this class yet.</div>`;
@@ -1729,10 +2703,26 @@ async function loadLearners() {
     }
 
     host.innerHTML = `
-      <div class="table-wrap">
-        <table class="data-table">
+      <div class="learner-bulk-toolbar">
+        <label class="learner-select-all">
+          <input id="selectAllLearnersCheckbox" type="checkbox" />
+          <span>Select all</span>
+        </label>
+        <span id="selectedLearnersCount" class="learner-selected-count">0 selected</span>
+        <div class="learner-bulk-actions">
+          <button id="removeSelectedLearnersBtn" class="danger-btn compact-btn" type="button" disabled>
+            Remove Selected
+          </button>
+          <button id="removeAllLearnersBtn" class="danger-outline-btn compact-btn" type="button">
+            Remove All
+          </button>
+        </div>
+      </div>
+      <div class="table-wrap learner-table-wrap">
+        <table class="data-table learners-table">
           <thead>
             <tr>
+              <th class="learner-select-cell" aria-label="Select"></th>
               <th>Learner</th>
               <th>Email</th>
               <th>Unique Cards</th>
@@ -1740,6 +2730,7 @@ async function loadLearners() {
               <th>Mastery</th>
               <th>Quiz</th>
               <th>Last Studied</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -1748,7 +2739,15 @@ async function loadLearners() {
               const mastery = Math.round((avg / 5) * 100);
 
               return `
-                <tr>
+                <tr data-learner-row="${escapeHtml(l.studentId)}">
+                  <td class="learner-select-cell">
+                    <input
+                      type="checkbox"
+                      class="learner-select-checkbox"
+                      data-select-learner="${escapeHtml(l.studentId)}"
+                      aria-label="Select ${escapeHtml(l.name)}"
+                    />
+                  </td>
                   <td>${escapeHtml(l.name)}</td>
                   <td>${escapeHtml(l.email || "—")}</td>
                   <td>${l.uniqueKeys.size}</td>
@@ -1756,34 +2755,240 @@ async function loadLearners() {
                   <td>${mastery}%</td>
                   <td>${l.quizAnswered ? `${Math.round((l.quizCorrect / l.quizAnswered) * 100)}% (${l.quizCorrect}/${l.quizAnswered})` : "—"}</td>
                   <td>${timestampToText(l.updatedAt)}</td>
+                  <td class="learner-action-cell">
+                    <button
+                      type="button"
+                      class="danger-btn compact-btn remove-learner-btn"
+                      data-remove-learner="${escapeHtml(l.studentId)}"
+                      aria-label="Remove ${escapeHtml(l.name)} from this class"
+                    >Remove</button>
+                  </td>
                 </tr>
               `;
             }).join("")}
           </tbody>
         </table>
       </div>`;
+
+    updateLearnerBulkControls();
   } catch (err) {
     host.innerHTML = `<div class="empty-state">Learners could not be loaded.</div>`;
     handleFirebaseError(err, "Could not load learners.");
   }
 }
 
-function chooseStudyOrder(scope, deckId = null) {
+
+function updateLearnerBulkControls() {
+  if (!isOwner()) return;
+
+  const validIds = new Set(state.learners.map(learner => learner.studentId));
+  state.selectedLearnerIds = new Set(
+    [...state.selectedLearnerIds].filter(studentId => validIds.has(studentId))
+  );
+
+  const selectedCount = state.selectedLearnerIds.size;
+  const totalCount = state.learners.length;
+  const selectAll = document.getElementById("selectAllLearnersCheckbox");
+  const countLabel = document.getElementById("selectedLearnersCount");
+  const removeSelectedBtn = document.getElementById("removeSelectedLearnersBtn");
+
+  if (selectAll) {
+    selectAll.checked = totalCount > 0 && selectedCount === totalCount;
+    selectAll.indeterminate = selectedCount > 0 && selectedCount < totalCount;
+  }
+
+  if (countLabel) {
+    countLabel.textContent = `${selectedCount} selected`;
+  }
+
+  if (removeSelectedBtn) {
+    removeSelectedBtn.disabled = selectedCount === 0;
+    removeSelectedBtn.textContent = selectedCount
+      ? `Remove Selected (${selectedCount})`
+      : "Remove Selected";
+  }
+
+  document.querySelectorAll("[data-select-learner]").forEach(checkbox => {
+    checkbox.checked = state.selectedLearnerIds.has(checkbox.dataset.selectLearner);
+  });
+
+  document.querySelectorAll("[data-learner-row]").forEach(row => {
+    row.classList.toggle(
+      "learner-row-selected",
+      state.selectedLearnerIds.has(row.dataset.learnerRow)
+    );
+  });
+}
+
+function setAllLearnersSelected(selected) {
+  if (!isOwner()) return;
+
+  state.selectedLearnerIds = selected
+    ? new Set(state.learners.map(learner => learner.studentId))
+    : new Set();
+
+  updateLearnerBulkControls();
+}
+
+function toggleLearnerSelection(studentId, selected) {
+  if (!isOwner()) return;
+
+  if (selected) {
+    state.selectedLearnerIds.add(studentId);
+  } else {
+    state.selectedLearnerIds.delete(studentId);
+  }
+
+  updateLearnerBulkControls();
+}
+
+function openRemoveLearnersModal(studentIds) {
+  if (!isOwner()) return;
+
+  const wantedIds = new Set((studentIds || []).filter(Boolean));
+  const learners = state.learners.filter(learner => wantedIds.has(learner.studentId));
+
+  if (!learners.length) {
+    showMessage("No learners were selected. Refresh the Learners tab and try again.", "error");
+    return;
+  }
+
+  state.pendingLearnerRemoval = {
+    learnerIds: learners.map(learner => learner.studentId),
+    learners: learners.map(learner => ({
+      studentId: learner.studentId,
+      name: learner.name || "Student",
+      email: learner.email || ""
+    }))
+  };
+
+  const count = learners.length;
+  const names = learners.slice(0, 5).map(learner => learner.name || "Student");
+  const moreCount = Math.max(0, count - names.length);
+
+  document.getElementById("removeLearnerModalTitle").textContent =
+    count === 1 ? "Remove learner?" : `Remove ${count} learners?`;
+  document.getElementById("removeLearnerName").textContent =
+    count === 1 ? names[0] : `${count} learners selected`;
+  document.getElementById("removeLearnerEmail").textContent =
+    count === 1
+      ? (learners[0].email || "No email available")
+      : `${names.join(", ")}${moreCount ? ` +${moreCount} more` : ""}`;
+
+  const confirmBtn = document.getElementById("confirmRemoveLearnerBtn");
+  confirmBtn.textContent = count === 1 ? "Remove Learner" : `Remove ${count} Learners`;
+
+  openModal("removeLearnerModal");
+}
+
+function openRemoveLearnerModal(studentId) {
+  openRemoveLearnersModal([studentId]);
+}
+
+function openRemoveSelectedLearnersModal() {
+  openRemoveLearnersModal([...state.selectedLearnerIds]);
+}
+
+function openRemoveAllLearnersModal() {
+  openRemoveLearnersModal(state.learners.map(learner => learner.studentId));
+}
+
+async function commitDeleteRefsInChunks(refs, chunkSize = 450) {
+  for (let i = 0; i < refs.length; i += chunkSize) {
+    const batch = writeBatch(state.db);
+    refs.slice(i, i + chunkSize).forEach(ref => batch.delete(ref));
+    await batch.commit();
+  }
+}
+
+async function confirmRemoveLearner() {
+  if (!isOwner() || !state.pendingLearnerRemoval || !state.selectedClass) return;
+
+  const pending = state.pendingLearnerRemoval;
+  const learners = pending.learners || [];
+  const learnerIds = new Set(pending.learnerIds || []);
+  if (!learnerIds.size) return;
+
+  const classId = state.selectedClass.id;
+  const button = document.getElementById("confirmRemoveLearnerBtn");
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = learnerIds.size === 1 ? "Removing…" : `Removing ${learnerIds.size}…`;
+
+  try {
+    const progressQuery = query(
+      collection(state.db, "progress"),
+      where("classId", "==", classId)
+    );
+    const progressSnap = await getDocs(progressQuery);
+
+    const refsToDelete = [];
+
+    learnerIds.forEach(studentId => {
+      refsToDelete.push(doc(state.db, "users", studentId, "library", classId));
+    });
+
+    progressSnap.docs.forEach(progressDoc => {
+      if (learnerIds.has(progressDoc.data().studentId)) {
+        refsToDelete.push(progressDoc.ref);
+      }
+    });
+
+    await commitDeleteRefsInChunks(refsToDelete);
+
+    const removedNames = learners.map(learner => learner.name || "Student");
+    const removedCount = learnerIds.size;
+
+    state.pendingLearnerRemoval = null;
+    state.selectedLearnerIds.clear();
+    closeModals();
+    await loadLearners();
+
+    showMessage(
+      removedCount === 1
+        ? `“${removedNames[0] || "Learner"}” was removed from this class.`
+        : `${removedCount} learners were removed from this class.`,
+      "success"
+    );
+  } catch (err) {
+    handleFirebaseError(
+      err,
+      "Could not remove the learners. Make sure the updated Flashcards Firestore rules are published."
+    );
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
+  }
+}
+
+function chooseStudyOrder(scope, deckId = null, deckIds = null) {
   let targetName = state.selectedClass?.name || "Class";
+  let selectedIds = Array.isArray(deckIds) ? deckIds : [];
 
   if (scope === "deck") {
     const deck = state.decks.find(d => d.id === deckId);
     if (!deck?.cards?.length) return;
     targetName = deck.name;
+  } else if (scope === "selection") {
+    const allowed = new Set(studyableDecks().map(deck => deck.id));
+    selectedIds = selectedIds.filter(id => allowed.has(id));
+    if (!selectedIds.length) return;
+    targetName = `${selectedIds.length} selected deck${selectedIds.length === 1 ? "" : "s"}`;
   } else if (!state.decks.some(deck => deck.cards?.length)) {
     return;
   }
 
-  state.pendingStudy = { scope, deckId };
+  state.pendingStudy = { scope, deckId, deckIds: selectedIds };
   document.getElementById("studyOrderTarget").textContent =
     scope === "deck"
       ? `Study deck: ${targetName}`
-      : `Study class: ${targetName}`;
+      : scope === "selection"
+        ? `Study together: ${targetName}`
+        : `Study class: ${targetName}`;
+
+  document.querySelectorAll("[data-study-direction]").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.studyDirection === state.studyDirection);
+  });
 
   openModal("studyOrderModal");
 }
@@ -1793,18 +2998,36 @@ function beginPendingStudy(order) {
   if (!pending) return;
 
   state.studyOrder = order;
+  const direction = state.studyDirection;
   closeModals();
 
   if (pending.scope === "deck") {
-    startDeckStudy(pending.deckId, order);
+    startDeckStudy(pending.deckId, order, direction);
+  } else if (pending.scope === "selection") {
+    startSelectedDecksStudy(pending.deckIds, order, direction);
   } else {
-    startClassStudy(order);
+    startClassStudy(order, direction);
   }
 
   state.pendingStudy = null;
 }
 
-function startDeckStudy(deckId, order = state.studyOrder) {
+function studyDirectionLabel(direction) {
+  if (direction === "backFront") return "Back → Front";
+  if (direction === "mixed") return "Mixed Direction";
+  return "Front → Back";
+}
+
+function applyStudyDirection(cards, direction = state.studyDirection) {
+  return cards.map(card => ({
+    ...card,
+    _studyDirection: direction === "mixed"
+      ? (Math.random() < 0.5 ? "frontBack" : "backFront")
+      : direction
+  }));
+}
+
+function startDeckStudy(deckId, order = state.studyOrder, direction = state.studyDirection) {
   const deck = state.decks.find(d => d.id === deckId);
   if (!deck?.cards?.length) return;
 
@@ -1812,12 +3035,13 @@ function startDeckStudy(deckId, order = state.studyOrder) {
   state.selectedDeck = deck;
   state.studyMode = "standard";
   state.studyOrder = order;
+  state.studyDirection = direction;
 
-  const cards = deck.cards.map(card => ({
+  const cards = applyStudyDirection(deck.cards.map(card => ({
     ...card,
     deckId: deck.id,
     deckName: deck.name
-  }));
+  })), direction);
 
   state.sessionCards = order === "random"
     ? shuffledCopy(cards)
@@ -1825,11 +3049,50 @@ function startDeckStudy(deckId, order = state.studyOrder) {
 
   prepareSession(
     deck.name,
-    order === "random" ? "Deck Study · Random" : "Deck Study · Progressive"
+    `Deck Study · ${studyDirectionLabel(direction)} · ${order === "random" ? "Random" : "Progressive"}`
   );
 }
 
-function startClassStudy(order = state.studyOrder) {
+function startSelectedDecksStudy(deckIds, order = state.studyOrder, direction = state.studyDirection) {
+  const wanted = new Set(Array.isArray(deckIds) ? deckIds : []);
+  const decks = state.decks.filter(
+    deck => wanted.has(deck.id) && (deck.cards?.length || 0) > 0
+  );
+
+  if (!decks.length) return;
+
+  const cards = [];
+  for (const deck of decks) {
+    for (const card of deck.cards || []) {
+      cards.push({
+        ...card,
+        deckId: deck.id,
+        deckName: deck.name
+      });
+    }
+  }
+
+  if (!cards.length) return;
+
+  state.studyScope = "selection";
+  state.selectedDeck = null;
+  state.studySelectionDeckIds = decks.map(deck => deck.id);
+  state.studyMode = "standard";
+  state.studyOrder = order;
+  state.studyDirection = direction;
+
+  const directedCards = applyStudyDirection(cards, direction);
+  state.sessionCards = order === "random"
+    ? shuffledCopy(directedCards)
+    : directedCards;
+
+  prepareSession(
+    state.selectedClass.name,
+    `${decks.length} Selected Deck${decks.length === 1 ? "" : "s"} · ${studyDirectionLabel(direction)} · ${order === "random" ? "Random" : "Progressive"}`
+  );
+}
+
+function startClassStudy(order = state.studyOrder, direction = state.studyDirection) {
   const cards = [];
 
   for (const deck of state.decks) {
@@ -1848,14 +3111,16 @@ function startClassStudy(order = state.studyOrder) {
   state.selectedDeck = null;
   state.studyMode = "standard";
   state.studyOrder = order;
+  state.studyDirection = direction;
 
+  const directedCards = applyStudyDirection(cards, direction);
   state.sessionCards = order === "random"
-    ? shuffledCopy(cards)
-    : cards;
+    ? shuffledCopy(directedCards)
+    : directedCards;
 
   prepareSession(
     state.selectedClass.name,
-    order === "random" ? "Class Study · Random" : "Class Study · Progressive"
+    `Class Study · ${studyDirectionLabel(direction)} · ${order === "random" ? "Random" : "Progressive"}`
   );
 }
 
@@ -1872,13 +3137,25 @@ function chooseQuizSetup(scope, deckId = null) {
   }
 
   state.pendingQuiz = { scope, deckId };
+  const availableQuestionCount = collectQuizCards(scope, deckId).length;
+  const savedDefaults = readQuizDefaults();
+  const useAllQuestions = !savedDefaults || savedDefaults.questionCountMode === "all";
+  const savedQuestionCount = savedDefaults?.questionCount || availableQuestionCount;
+
   state.quizConfig = {
-    questionStyle: "standard",
-    template: "What is the answer for {term}?",
-    direction: "frontBack",
-    answerMode: "multiple",
-    order: "progressive",
-    points: 1
+    questionStyle: savedDefaults?.questionStyle || "standard",
+    template: savedDefaults?.template || "What is the answer for {term}?",
+    direction: savedDefaults?.direction || "frontBack",
+    answerMode: savedDefaults?.answerMode || "multiple",
+    feedbackMode: savedDefaults?.feedbackMode || "immediate",
+    order: savedDefaults?.order || "progressive",
+    inclusionMode: savedDefaults?.inclusionMode || "count",
+    questionCount: useAllQuestions
+      ? availableQuestionCount
+      : Math.max(1, Math.min(availableQuestionCount, savedQuestionCount)),
+    questionCountMode: useAllQuestions ? "all" : "fixed",
+    manualCardKeys: [],
+    points: savedDefaults?.points ?? 1
   };
 
   document.getElementById("quizSetupTarget").textContent =
@@ -1894,11 +3171,24 @@ function chooseQuizSetup(scope, deckId = null) {
   });
 
   document.getElementById("quizTemplateInput").value = state.quizConfig.template;
-  document.getElementById("quizTemplateField").classList.add("hidden");
+  document.getElementById("quizTemplateField").classList.toggle(
+    "hidden",
+    state.quizConfig.questionStyle !== "custom"
+  );
+
+  const questionCountInput = document.getElementById("quizQuestionCountInput");
+  questionCountInput.max = String(Math.max(1, availableQuestionCount));
+  questionCountInput.value = String(Math.max(1, state.quizConfig.questionCount));
+  document.getElementById("quizQuestionCountHelp").textContent =
+    `${availableQuestionCount} card${availableQuestionCount === 1 ? "" : "s"} available. ` +
+    `Progressive uses the first questions; Random chooses from across the set.`;
+
+  syncQuizInclusionUi();
+
   document.getElementById("quizPointsInput").value = state.quizConfig.points;
   document.getElementById("exportGoogleFormsBtn").classList.toggle("hidden", !isOwner());
-  document.getElementById("googleFormsExportResult").classList.add("hidden");
-  document.getElementById("googleFormsExportStatus").textContent = "";
+  updateQuizDefaultControls(Boolean(savedDefaults));
+  resetGoogleFormsGeneratedScript();
 
   openModal("quizSetupModal");
 }
@@ -1934,6 +3224,78 @@ function collectQuizCards(scope, deckId = null) {
   return cards;
 }
 
+function quizCardKey(card) {
+  return `${card.deckId}::${card.id}`;
+}
+
+function availableQuizCards() {
+  if (!state.pendingQuiz) return [];
+  return collectQuizCards(state.pendingQuiz.scope, state.pendingQuiz.deckId);
+}
+
+function normalizeManualQuizSelection() {
+  const available = availableQuizCards();
+  const validKeys = new Set(available.map(quizCardKey));
+  const current = Array.isArray(state.quizConfig.manualCardKeys)
+    ? state.quizConfig.manualCardKeys
+    : [];
+
+  state.quizConfig.manualCardKeys = current.filter(key => validKeys.has(key));
+}
+
+function ensureManualQuizSelection() {
+  normalizeManualQuizSelection();
+  if (state.quizConfig.manualCardKeys.length) return;
+
+  // Start with everything selected the first time Manual Pick is opened.
+  // This makes it quick to remove only a few cards, while Clear supports building from zero.
+  state.quizConfig.manualCardKeys = availableQuizCards().map(quizCardKey);
+}
+
+function renderManualQuizPicker() {
+  const list = document.getElementById("quizManualCardList");
+  const countEl = document.getElementById("quizManualSelectionCount");
+  if (!list || !countEl) return;
+
+  normalizeManualQuizSelection();
+  const selected = new Set(state.quizConfig.manualCardKeys || []);
+  const cards = availableQuizCards();
+
+  countEl.textContent = `${selected.size} of ${cards.length} selected`;
+
+  if (!cards.length) {
+    list.innerHTML = '<div class="quiz-manual-empty">No flashcards are available.</div>';
+    return;
+  }
+
+  list.innerHTML = cards.map((card, index) => {
+    const key = quizCardKey(card);
+    const checked = selected.has(key) ? "checked" : "";
+    return `
+      <label class="quiz-manual-card-row">
+        <input type="checkbox" data-quiz-manual-card="${escapeHtml(key)}" ${checked} />
+        <span class="quiz-manual-card-number">${index + 1}</span>
+        <span class="quiz-manual-card-copy">
+          <strong>${escapeHtml(card.front)}</strong>
+          <span>${escapeHtml(card.back)}</span>
+          <small>${escapeHtml(card.deckName || "Deck")}</small>
+        </span>
+      </label>
+    `;
+  }).join("");
+}
+
+function syncQuizInclusionUi() {
+  const manual = state.quizConfig.inclusionMode === "manual";
+  document.getElementById("quizCountModePanel")?.classList.toggle("hidden", manual);
+  document.getElementById("quizManualModePanel")?.classList.toggle("hidden", !manual);
+
+  if (manual) {
+    ensureManualQuizSelection();
+    renderManualQuizPicker();
+  }
+}
+
 function uniqueValues(values) {
   const seen = new Set();
   const result = [];
@@ -1964,10 +3326,24 @@ function buildMultipleChoiceOptions(card, direction, allCards) {
 }
 
 function buildQuizQuestions(scope, deckId, config) {
-  let cards = collectQuizCards(scope, deckId);
+  const allCards = collectQuizCards(scope, deckId);
+  let cards;
 
-  if (config.order === "random") {
-    cards = shuffledCopy(cards);
+  if (config.inclusionMode === "manual") {
+    const selectedKeys = new Set(Array.isArray(config.manualCardKeys) ? config.manualCardKeys : []);
+    cards = allCards.filter(card => selectedKeys.has(quizCardKey(card)));
+    if (config.order === "random") cards = shuffledCopy(cards);
+  } else {
+    cards = config.order === "random"
+      ? shuffledCopy(allCards)
+      : [...allCards];
+
+    const requestedCount = Number(config.questionCount);
+    const questionCount = Number.isFinite(requestedCount) && requestedCount > 0
+      ? Math.min(allCards.length, Math.floor(requestedCount))
+      : allCards.length;
+
+    cards = cards.slice(0, questionCount);
   }
 
   return cards.map((card, index) => {
@@ -1991,7 +3367,7 @@ function buildQuizQuestions(scope, deckId, config) {
     let type = requestedType;
 
     if (requestedType === "multiple") {
-      options = buildMultipleChoiceOptions(card, direction, cards);
+      options = buildMultipleChoiceOptions(card, direction, allCards);
       if (!options) type = "typed";
     }
 
@@ -2011,6 +3387,22 @@ function buildQuizQuestions(scope, deckId, config) {
 
 function syncQuizSetupInputs() {
   state.quizConfig.template = document.getElementById("quizTemplateInput").value.trim();
+
+  const availableCount = state.pendingQuiz
+    ? collectQuizCards(state.pendingQuiz.scope, state.pendingQuiz.deckId).length
+    : 0;
+
+  if (state.quizConfig.inclusionMode === "manual") {
+    normalizeManualQuizSelection();
+  } else {
+    const rawQuestionCount = Number(document.getElementById("quizQuestionCountInput").value);
+    state.quizConfig.questionCount = availableCount
+      ? Math.max(1, Math.min(availableCount, Math.floor(rawQuestionCount || availableCount)))
+      : 0;
+    document.getElementById("quizQuestionCountInput").value =
+      String(state.quizConfig.questionCount || 1);
+  }
+
   state.quizConfig.points = Math.max(
     0,
     Math.min(100, Number(document.getElementById("quizPointsInput").value || 1))
@@ -2030,6 +3422,11 @@ function validateQuizSetup() {
       showMessage('Custom questions must include {term}.', "error");
       return false;
     }
+  }
+
+  if (state.quizConfig.inclusionMode === "manual" && !state.quizConfig.manualCardKeys.length) {
+    showMessage("Select at least one flashcard for the quiz.", "error");
+    return false;
   }
 
   return true;
@@ -2052,6 +3449,7 @@ function startConfiguredQuiz() {
   }
 
   state.quizQuestions = questions;
+  state.quizOriginalQuestions = questions.map(question => ({ ...question }));
   state.quizIndex = 0;
   state.quizScore = 0;
   state.quizResults = [];
@@ -2266,9 +3664,25 @@ function buildGsQuizPayload() {
   };
 }
 
-function exportQuizToGoogleForms() {
+function resetGoogleFormsGeneratedScript() {
+  state.generatedGoogleFormsScript = "";
+  state.generatedGoogleFormsFileName = "";
+  state.generatedGoogleFormsQuestionCount = 0;
+
+  const resultBox = document.getElementById("googleFormsExportResult");
+  const preview = document.getElementById("googleFormsScriptPreview");
+  const summary = document.getElementById("googleFormsGeneratedSummary");
+  const status = document.getElementById("googleFormsExportStatus");
+
+  resultBox?.classList.add("hidden");
+  if (preview) preview.value = "";
+  if (summary) summary.textContent = "Choose Copy Script or Download .gs.";
+  if (status) status.textContent = "";
+}
+
+function generateQuizGoogleFormsScript() {
   if (!isOwner()) {
-    showMessage("Only the class owner can export this quiz.", "error");
+    showMessage("Only the class owner can generate this quiz script.", "error");
     return;
   }
 
@@ -2277,23 +3691,96 @@ function exportQuizToGoogleForms() {
 
   const status = document.getElementById("googleFormsExportStatus");
   const resultBox = document.getElementById("googleFormsExportResult");
-  resultBox.classList.add("hidden");
-
+  const preview = document.getElementById("googleFormsScriptPreview");
+  const summary = document.getElementById("googleFormsGeneratedSummary");
   const payload = buildGsQuizPayload();
 
   if (!payload) {
+    resetGoogleFormsGeneratedScript();
     status.textContent = "There are no flashcards available to export.";
     return;
   }
 
   try {
     const source = buildGoogleFormsGsSource(payload);
+    const fileName = `${safeFileName(payload.title)}.gs`;
+
+    state.generatedGoogleFormsScript = source;
+    state.generatedGoogleFormsFileName = fileName;
+    state.generatedGoogleFormsQuestionCount = payload.questions.length;
+
+    preview.value = source;
+    summary.textContent =
+      `${payload.questions.length} question${payload.questions.length === 1 ? "" : "s"} ready · ${fileName}`;
+    resultBox.classList.remove("hidden");
+    status.textContent = "Script generated. Copy it directly or download the .gs file.";
+
+    showMessage("Google Forms script generated.", "success");
+  } catch (err) {
+    console.error(err);
+    resetGoogleFormsGeneratedScript();
+    status.textContent = `Generation failed: ${err?.message || "Unknown error"}`;
+  }
+}
+
+async function writeTextToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const helper = document.createElement("textarea");
+  helper.value = text;
+  helper.setAttribute("readonly", "");
+  helper.style.position = "fixed";
+  helper.style.opacity = "0";
+  helper.style.pointerEvents = "none";
+  document.body.appendChild(helper);
+  helper.select();
+  helper.setSelectionRange(0, helper.value.length);
+
+  const copied = document.execCommand("copy");
+  helper.remove();
+
+  if (!copied) throw new Error("Copy was blocked by the browser.");
+}
+
+async function copyGeneratedGoogleFormsScript() {
+  const source = state.generatedGoogleFormsScript;
+  const status = document.getElementById("googleFormsExportStatus");
+
+  if (!source) {
+    status.textContent = "Generate the Google Forms script first.";
+    return;
+  }
+
+  try {
+    await writeTextToClipboard(source);
+    status.textContent =
+      `Copied ${state.generatedGoogleFormsQuestionCount} question${state.generatedGoogleFormsQuestionCount === 1 ? "" : "s"} as Google Apps Script.`;
+    showMessage("Google Forms script copied.", "success");
+  } catch (err) {
+    console.error(err);
+    status.textContent = `Copy failed: ${err?.message || "Unknown error"}`;
+  }
+}
+
+function downloadGeneratedGoogleFormsScript() {
+  const source = state.generatedGoogleFormsScript;
+  const status = document.getElementById("googleFormsExportStatus");
+
+  if (!source) {
+    status.textContent = "Generate the Google Forms script first.";
+    return;
+  }
+
+  try {
     const blob = new Blob([source], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
 
     link.href = url;
-    link.download = `${safeFileName(payload.title)}.gs`;
+    link.download = state.generatedGoogleFormsFileName || "flashcards-quiz.gs";
 
     document.body.appendChild(link);
     link.click();
@@ -2302,16 +3789,33 @@ function exportQuizToGoogleForms() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 
     status.textContent =
-      `Downloaded ${payload.questions.length} questions as a Google Apps Script file.`;
-
-    resultBox.innerHTML =
-      "<strong>Script downloaded.</strong> Open Google Apps Script, paste the .gs file, and run createFlashcardsQuiz().";
-    resultBox.classList.remove("hidden");
-
+      `Downloaded ${state.generatedGoogleFormsQuestionCount} question${state.generatedGoogleFormsQuestionCount === 1 ? "" : "s"} as a Google Apps Script file.`;
     showMessage("Google Forms .gs script downloaded.", "success");
   } catch (err) {
     console.error(err);
-    status.textContent = `Export failed: ${err?.message || "Unknown error"}`;
+    status.textContent = `Download failed: ${err?.message || "Unknown error"}`;
+  }
+}
+
+function quizUsesImmediateFeedback() {
+  return (state.quizConfig.feedbackMode || "immediate") === "immediate";
+}
+
+function quizViewIsOpen() {
+  return !document.getElementById("quizView")?.classList.contains("hidden");
+}
+
+function updateQuizLiveMetric(answeredCount = state.quizIndex) {
+  const label = document.getElementById("quizLiveMetricLabel");
+  const value = document.getElementById("quizLiveScore");
+  if (!label || !value) return;
+
+  if (quizUsesImmediateFeedback()) {
+    label.textContent = "Score";
+    value.textContent = `${state.quizScore} / ${answeredCount}`;
+  } else {
+    label.textContent = "Answered";
+    value.textContent = `${answeredCount} / ${state.quizQuestions.length}`;
   }
 }
 
@@ -2330,21 +3834,25 @@ function renderQuizQuestion() {
   document.getElementById("quizQuestionType").textContent =
     q.type === "multiple" ? "Multiple Choice" : "Type Answer";
   document.getElementById("quizQuestionText").textContent = q.prompt;
-  document.getElementById("quizLiveScore").textContent =
-    `${state.quizScore} / ${state.quizIndex}`;
+  updateQuizLiveMetric(state.quizIndex);
   document.getElementById("quizProgressFill").style.width =
     `${(state.quizIndex / state.quizQuestions.length) * 100}%`;
 
   const choiceArea = document.getElementById("quizChoiceArea");
   const typingArea = document.getElementById("quizTypingArea");
   const typingInput = document.getElementById("quizTypingInput");
+  const nextButton = document.getElementById("quizNextBtn");
 
   choiceArea.innerHTML = "";
   choiceArea.classList.toggle("hidden", q.type !== "multiple");
   typingArea.classList.toggle("hidden", q.type !== "typed");
 
   document.getElementById("quizFeedback").classList.add("hidden");
-  document.getElementById("quizNextBtn").classList.add("hidden");
+  nextButton.classList.add("hidden");
+  nextButton.textContent =
+    state.quizIndex === state.quizQuestions.length - 1
+      ? "See Results →"
+      : "Next Question →";
   document.getElementById("quizCheckBtn").disabled = false;
   typingInput.disabled = false;
   typingInput.value = "";
@@ -2370,17 +3878,24 @@ function showQuizFeedback(correct, given, question) {
   const title = document.getElementById("quizFeedbackTitle");
   const text = document.getElementById("quizFeedbackText");
 
-  box.classList.remove("hidden", "correct", "incorrect");
-  box.classList.add(correct ? "correct" : "incorrect");
+  box.classList.remove("hidden", "correct", "incorrect", "pending");
 
-  title.textContent = correct ? "Correct!" : "Not quite.";
-  text.textContent = correct
-    ? `Answer: ${question.answer}`
-    : `Correct answer: ${question.answer}`;
+  if (quizUsesImmediateFeedback()) {
+    box.classList.add(correct ? "correct" : "incorrect");
+    title.textContent = correct ? "Correct!" : "Not quite.";
+    text.textContent = correct
+      ? `Answer: ${question.answer}`
+      : `Correct answer: ${question.answer}`;
+  } else {
+    box.classList.add("pending");
+    title.textContent = "Answer recorded";
+    text.textContent = "Your answer is locked in. Correct answers will be shown at the end.";
+  }
 
   document.getElementById("quizNextBtn").classList.remove("hidden");
-  document.getElementById("quizLiveScore").textContent =
-    `${state.quizScore} / ${state.quizIndex + 1}`;
+  document.getElementById("quizProgressFill").style.width =
+    `${((state.quizIndex + 1) / state.quizQuestions.length) * 100}%`;
+  updateQuizLiveMetric(state.quizIndex + 1);
 }
 
 function answerQuizQuestion(given) {
@@ -2408,8 +3923,10 @@ function answerQuizQuestion(given) {
 
   document.querySelectorAll(".quiz-choice-btn").forEach(btn => {
     btn.disabled = true;
-    const value = btn.dataset.quizChoice;
 
+    if (!quizUsesImmediateFeedback()) return;
+
+    const value = btn.dataset.quizChoice;
     if (normalizeText(value) === normalizeText(q.answer)) {
       btn.classList.add("correct");
     } else if (normalizeText(value) === normalizeText(cleanGiven) && !correct) {
@@ -2453,8 +3970,8 @@ async function saveQuizProgress() {
         deckId,
         deckName: group.deckName,
         studentId: state.user.uid,
-        studentName: state.user.displayName || "",
-        studentEmail: state.user.email || "",
+        studentName: isGuestStudent() ? guestStudentName() : (state.user.displayName || ""),
+        studentEmail: isGuestStudent() ? "" : (state.user.email || ""),
         studied: 0,
         ratingCount: 0,
         ratingTotal: 0,
@@ -2474,8 +3991,8 @@ async function saveQuizProgress() {
       deckId,
       deckName: group.deckName,
       studentId: state.user.uid,
-      studentName: state.user.displayName || "",
-      studentEmail: state.user.email || "",
+      studentName: isGuestStudent() ? guestStudentName() : (state.user.displayName || ""),
+      studentEmail: isGuestStudent() ? "" : (state.user.email || ""),
       quizAnswered: p.quizAnswered,
       quizCorrect: p.quizCorrect,
       lastQuizPercent: group.answered
@@ -2492,13 +4009,27 @@ async function finishQuiz() {
 
   document.getElementById("quizResultsTitle").textContent =
     `${state.selectedClass.name} Quiz Results`;
+  const resultMessage = percent >= 90
+    ? "Excellent work."
+    : percent >= 75
+      ? "Nice work — you are close to mastery."
+      : percent >= 60
+        ? "Good start — review the missed questions and try again."
+        : "Keep practicing — the review below shows what to work on next.";
+
   document.getElementById("quizResultsText").textContent =
-    `You answered ${state.quizScore} of ${total} questions correctly.`;
+    `You answered ${state.quizScore} of ${total} questions correctly. ${resultMessage}`;
   document.getElementById("quizCorrectCount").textContent =
     `${state.quizScore} / ${total}`;
   document.getElementById("quizPercent").textContent = `${percent}%`;
 
   const missed = state.quizResults.filter(r => !r.correct);
+  document.getElementById("quizMissedCount").textContent = String(missed.length);
+  const retryMissedBtn = document.getElementById("quizRetryMissedBtn");
+  retryMissedBtn.classList.toggle("hidden", missed.length === 0);
+  retryMissedBtn.textContent = missed.length
+    ? `Retry Missed (${missed.length})`
+    : "Retry Missed";
   const review = document.getElementById("quizReview");
 
   if (!missed.length) {
@@ -2539,15 +4070,39 @@ function tryQuizAgain() {
   state.quizResults = [];
   state.quizAnswered = false;
 
-  // Random order gets a fresh shuffle on each attempt.
+  document.getElementById("quizScopeLabel").textContent =
+    state.pendingQuiz?.scope === "deck" ? "Deck Quiz" : "Class Quiz";
+
   if (state.quizConfig.order === "random" && state.pendingQuiz) {
-    state.quizQuestions = buildQuizQuestions(
+    const rebuilt = buildQuizQuestions(
       state.pendingQuiz.scope,
       state.pendingQuiz.deckId,
       state.quizConfig
     );
+    state.quizQuestions = rebuilt;
+    state.quizOriginalQuestions = rebuilt.map(question => ({ ...question }));
+  } else {
+    state.quizQuestions = state.quizOriginalQuestions.map(question => ({ ...question }));
   }
 
+  showPanel("quizView");
+  renderQuizQuestion();
+}
+
+function retryMissedQuizQuestions() {
+  const missed = state.quizResults.filter(result => !result.correct);
+  if (!missed.length) return;
+
+  state.quizQuestions = missed.map(result => {
+    const { given, correct, ...question } = result;
+    return question;
+  });
+  state.quizIndex = 0;
+  state.quizScore = 0;
+  state.quizResults = [];
+  state.quizAnswered = false;
+
+  document.getElementById("quizScopeLabel").textContent = "Retry Missed";
   showPanel("quizView");
   renderQuizQuestion();
 }
@@ -2570,8 +4125,12 @@ function renderStudyCard() {
     return;
   }
 
-  document.getElementById("questionText").textContent = card.front;
-  document.getElementById("answerText").textContent = card.back;
+  const direction = card._studyDirection || state.studyDirection || "frontBack";
+  const question = direction === "backFront" ? card.back : card.front;
+  const answer = direction === "backFront" ? card.front : card.back;
+
+  document.getElementById("questionText").textContent = question;
+  document.getElementById("answerText").textContent = answer;
   document.getElementById("cardCounter").textContent =
     `${state.sessionIndex + 1} of ${state.sessionCards.length}`;
   document.getElementById("studyProgressFill").style.width =
@@ -2630,8 +4189,8 @@ async function rateCurrentCard(rating) {
       deckId: card.deckId,
       deckName: card.deckName,
       studentId: state.user.uid,
-      studentName: state.user.displayName || "",
-      studentEmail: state.user.email || "",
+      studentName: isGuestStudent() ? guestStudentName() : (state.user.displayName || ""),
+      studentEmail: isGuestStudent() ? "" : (state.user.email || ""),
       studied: 0,
       ratingCount: 0,
       ratingTotal: 0,
@@ -2660,8 +4219,8 @@ async function rateCurrentCard(rating) {
       deckId: card.deckId,
       deckName: card.deckName,
       studentId: state.user.uid,
-      studentName: state.user.displayName || "",
-      studentEmail: state.user.email || "",
+      studentName: isGuestStudent() ? guestStudentName() : (state.user.displayName || ""),
+      studentEmail: isGuestStudent() ? "" : (state.user.email || ""),
       studied: p.studied,
       ratingCount: p.ratingCount,
       ratingTotal: p.ratingTotal,
@@ -2731,13 +4290,13 @@ function initTheme() {
 async function initializeFirebase() {
   try {
     // Classroom Tools embeds Flashcards in an iframe. Give that embedded copy its
-    // own named Firebase app and in-memory Auth instance so it never restores
-    // the standalone Flashcards login from this browser. The standalone page
-    // keeps Firebase's normal persistent sign-in behavior.
+    // own named Firebase app so its login stays separate from the standalone
+    // Flashcards page. Use local persistence so embedded Flashcards remembers
+    // the teacher until they explicitly click Sign out.
     if (EMBEDDED_CLASSROOM_MODE) {
       state.app = initializeApp(firebaseConfig, "flashcardsClassroomToolsEmbedded");
       state.auth = initializeAuth(state.app, {
-        persistence: inMemoryPersistence,
+        persistence: browserLocalPersistence,
         popupRedirectResolver: browserPopupRedirectResolver
       });
     } else {
@@ -2764,11 +4323,38 @@ async function initializeFirebase() {
 }
 
 document.addEventListener("click", async e => {
-  const sidebarArchiveClass = e.target.closest("[data-archive-sidebar-class]");
-  if (sidebarArchiveClass) {
+  const sidebarMenuButton = e.target.closest("[data-sidebar-menu-button]");
+  if (sidebarMenuButton) {
     e.preventDefault();
     e.stopPropagation();
-    return archiveClassById(sidebarArchiveClass.dataset.archiveSidebarClass);
+    const classId = sidebarMenuButton.dataset.sidebarMenuButton;
+    const menu = document.getElementById("sidebarClassMenu");
+    if (!menu.hidden && state.sidebarMenuClassId === classId) {
+      closeSidebarClassMenu();
+    } else {
+      openSidebarClassMenu(sidebarMenuButton, classId);
+    }
+    return;
+  }
+
+  const sidebarMenuAction = e.target.closest("[data-sidebar-menu-action]");
+  if (sidebarMenuAction) {
+    e.preventDefault();
+    e.stopPropagation();
+    const classId = state.sidebarMenuClassId;
+    const action = sidebarMenuAction.dataset.sidebarMenuAction;
+    closeSidebarClassMenu();
+    if (!classId) return;
+
+    if (action === "share") return openSidebarShareModal(classId);
+    if (action === "duplicate") return duplicateClassById(classId);
+    if (action === "archive") return archiveClassById(classId);
+    if (action === "delete") return deleteOwnedClassPermanently(classId);
+    return;
+  }
+
+  if (!e.target.closest("#sidebarClassMenu")) {
+    closeSidebarClassMenu();
   }
 
   const sidebarClass = e.target.closest("[data-sidebar-class]");
@@ -2801,6 +4387,11 @@ document.addEventListener("click", async e => {
     return toggleDeckVisibility(toggleDeckVisibilityBtn.dataset.toggleDeckVisibility);
   }
 
+  const viewDeckList = e.target.closest("[data-view-deck-list]");
+  if (viewDeckList) {
+    return openDeckList(viewDeckList.dataset.viewDeckList);
+  }
+
   const studyDeck = e.target.closest("[data-study-deck]");
   if (studyDeck) {
     return chooseStudyOrder("deck", studyDeck.dataset.studyDeck);
@@ -2817,6 +4408,7 @@ document.addEventListener("click", async e => {
     const setting = group.dataset.quizSetting;
 
     state.quizConfig[setting] = quizSettingBtn.dataset.value;
+    resetGoogleFormsGeneratedScript();
 
     group.querySelectorAll(".quiz-setting-btn").forEach(btn => {
       btn.classList.toggle("active", btn === quizSettingBtn);
@@ -2829,6 +4421,10 @@ document.addEventListener("click", async e => {
       if (custom) {
         setTimeout(() => document.getElementById("quizTemplateInput").focus(), 0);
       }
+    }
+
+    if (setting === "inclusionMode") {
+      syncQuizInclusionUi();
     }
 
     return;
@@ -2866,15 +4462,169 @@ document.addEventListener("click", async e => {
     return restoreArchivedDeck(classId, deckId);
   }
 
+  const removeLearnerBtn = e.target.closest("[data-remove-learner]");
+  if (removeLearnerBtn) {
+    return openRemoveLearnerModal(removeLearnerBtn.dataset.removeLearner);
+  }
+
+  if (e.target.closest("#removeSelectedLearnersBtn")) {
+    return openRemoveSelectedLearnersModal();
+  }
+
+  if (e.target.closest("#removeAllLearnersBtn")) {
+    return openRemoveAllLearnersModal();
+  }
+
   if (e.target.closest("[data-close-modal]")) {
     closeModals();
   }
 });
 
+document.addEventListener("change", e => {
+  if (e.target.matches("#selectAllLearnersCheckbox")) {
+    setAllLearnersSelected(e.target.checked);
+    return;
+  }
+
+  if (e.target.matches("[data-select-learner]")) {
+    toggleLearnerSelection(e.target.dataset.selectLearner, e.target.checked);
+  }
+});
+
+document.addEventListener("dragstart", e => {
+  const deckHandle = e.target.closest("[data-deck-drag-handle]");
+  if (deckHandle && isOwner()) {
+    const deckId = deckHandle.dataset.deckDragHandle;
+    state.draggedDeckId = deckId;
+
+    const deckRow = deckHandle.closest("[data-deck-drop-row]");
+    deckRow?.classList.add("deck-dragging");
+
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", deckId);
+    }
+    return;
+  }
+
+  const handle = e.target.closest("[data-sidebar-drag-handle]");
+  if (!handle) return;
+
+  const classId = handle.dataset.sidebarDragHandle;
+  state.sidebarDraggedClassId = classId;
+  closeSidebarClassMenu();
+
+  const row = handle.closest("[data-sidebar-drop-row]");
+  row?.classList.add("dragging");
+
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", classId);
+  }
+});
+
+document.addEventListener("dragover", e => {
+  const deckRow = e.target.closest("[data-deck-drop-row]");
+  if (deckRow && state.draggedDeckId) {
+    if (deckRow.dataset.deckDropRow === state.draggedDeckId) return;
+
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+
+    document.querySelectorAll(".deck-row").forEach(other => {
+      if (other !== deckRow) {
+        other.classList.remove("deck-drag-over-before", "deck-drag-over-after");
+      }
+    });
+
+    const rect = deckRow.getBoundingClientRect();
+    const after = e.clientY > rect.top + rect.height / 2;
+    deckRow.classList.toggle("deck-drag-over-before", !after);
+    deckRow.classList.toggle("deck-drag-over-after", after);
+    return;
+  }
+
+  const row = e.target.closest("[data-sidebar-drop-row]");
+  if (!row || !state.sidebarDraggedClassId) return;
+  if (row.dataset.sidebarDropRow === state.sidebarDraggedClassId) return;
+
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+
+  document.querySelectorAll(".sidebar-class-row").forEach(other => {
+    if (other !== row) other.classList.remove("drag-over-before", "drag-over-after");
+  });
+
+  const rect = row.getBoundingClientRect();
+  const after = e.clientY > rect.top + rect.height / 2;
+  row.classList.toggle("drag-over-before", !after);
+  row.classList.toggle("drag-over-after", after);
+});
+
+document.addEventListener("dragleave", e => {
+  const deckRow = e.target.closest("[data-deck-drop-row]");
+  if (deckRow && state.draggedDeckId) {
+    const related = e.relatedTarget;
+    if (related && deckRow.contains(related)) return;
+    deckRow.classList.remove("deck-drag-over-before", "deck-drag-over-after");
+    return;
+  }
+
+  const row = e.target.closest("[data-sidebar-drop-row]");
+  if (!row) return;
+  const related = e.relatedTarget;
+  if (related && row.contains(related)) return;
+  row.classList.remove("drag-over-before", "drag-over-after");
+});
+
+document.addEventListener("drop", async e => {
+  const deckRow = e.target.closest("[data-deck-drop-row]");
+  if (deckRow && state.draggedDeckId) {
+    e.preventDefault();
+    const draggedId = state.draggedDeckId;
+    const targetId = deckRow.dataset.deckDropRow;
+    const rect = deckRow.getBoundingClientRect();
+    const after = e.clientY > rect.top + rect.height / 2;
+
+    clearDeckDragMarkers();
+    state.draggedDeckId = null;
+    await reorderDeck(draggedId, targetId, after);
+    return;
+  }
+
+  const row = e.target.closest("[data-sidebar-drop-row]");
+  if (!row || !state.sidebarDraggedClassId) return;
+
+  e.preventDefault();
+  const draggedId = state.sidebarDraggedClassId;
+  const targetId = row.dataset.sidebarDropRow;
+  const rect = row.getBoundingClientRect();
+  const after = e.clientY > rect.top + rect.height / 2;
+
+  clearSidebarDragMarkers();
+  state.sidebarDraggedClassId = null;
+  await reorderSidebarClass(draggedId, targetId, after);
+});
+
+document.addEventListener("dragend", () => {
+  clearSidebarDragMarkers();
+  clearDeckDragMarkers();
+  state.sidebarDraggedClassId = null;
+  state.draggedDeckId = null;
+});
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") closeSidebarClassMenu();
+});
+
+window.addEventListener("resize", closeSidebarClassMenu);
+window.addEventListener("scroll", closeSidebarClassMenu, true);
+
 document.getElementById("googleSignInBtn").addEventListener("click", signInGoogle);
 document.getElementById("sharedGoogleSignInBtn").addEventListener("click", signInGoogle);
 
 document.getElementById("signOutBtn").addEventListener("click", async () => {
+  if (isGuestStudent()) clearClassParam();
   await signOut(state.auth);
 });
 
@@ -2887,10 +4637,46 @@ document.getElementById("createClassBtn").addEventListener("click", createClass)
 document.getElementById("editClassBtn").addEventListener("click", openEditClass);
 document.getElementById("editIntroBtn").addEventListener("click", openEditClass);
 document.getElementById("saveClassBtn").addEventListener("click", saveClassChanges);
-document.getElementById("archiveClassBtn").addEventListener("click", archiveCurrentClass);
 document.getElementById("openArchiveBtn").addEventListener("click", openArchiveManager);
 
+document.getElementById("sidebarShareLinkNameInput").addEventListener("input", syncSidebarShareModal);
+document.getElementById("sidebarShareUseClassNameBtn").addEventListener("click", useClassNameInSidebarShare);
+document.getElementById("sidebarShareSaveNameBtn").addEventListener("click", saveSidebarShareLinkName);
+document.getElementById("sidebarShareCopyLinkBtn").addEventListener("click", copySidebarShareLink);
+document.getElementById("sidebarShareLinkNameInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    copySidebarShareLink();
+  }
+});
+
 document.getElementById("shareClassBtn").addEventListener("click", () => copyClassLink());
+document.getElementById("linkPreviewSaveTitleBtn").addEventListener("click", saveLinkPreviewTitle);
+document.getElementById("linkPreviewUseClassNameBtn").addEventListener("click", useClassNameForLinkPreview);
+document.getElementById("linkPreviewTitleInput").addEventListener("input", () => {
+  const status = document.getElementById("linkPreviewTitleStatus");
+  if (status) status.textContent = "This name will become the &name= value in the copied link. Click Save if you want to remember it.";
+  scheduleClassroomShareRender();
+});
+document.getElementById("linkPreviewTitleInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    copyClassLink();
+  }
+});
+document.getElementById("classroomSaveShareTitleBtn").addEventListener("click", saveClassroomShareTitle);
+document.getElementById("classroomUseClassNameBtn").addEventListener("click", useClassNameForClassroomShare);
+document.getElementById("classroomShareTitleInput").addEventListener("input", () => {
+  const status = document.getElementById("classroomShareTitleStatus");
+  if (status) status.textContent = "Preview updated. Click Save Title if you want to remember this title.";
+  scheduleClassroomShareRender();
+});
+document.getElementById("classroomShareTitleInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    saveClassroomShareTitle();
+  }
+});
 document.getElementById("removeSharedClassBtn").addEventListener("click", removeSharedClass);
 
 document.getElementById("newDeckBtn").addEventListener("click", openNewDeck);
@@ -2929,16 +4715,107 @@ document.getElementById("copySelectedCardsBtn").addEventListener(
   copySelectedCards
 );
 
+document.getElementById("selectAllStudyDecks").addEventListener("change", e => {
+  if (e.target.checked) {
+    state.selectedStudyDeckIds = new Set(studyableDecks().map(deck => deck.id));
+  } else {
+    state.selectedStudyDeckIds.clear();
+  }
+  renderDeckRows();
+});
+
+document.getElementById("clearDeckSelectionBtn").addEventListener("click", () => {
+  state.selectedStudyDeckIds.clear();
+  renderDeckRows();
+});
+
+document.getElementById("studySelectedDecksBtn").addEventListener("click", () => {
+  const deckIds = selectedStudyDecks().map(deck => deck.id);
+  if (!deckIds.length) return;
+  chooseStudyOrder("selection", null, deckIds);
+});
+
+document.getElementById("deckRows").addEventListener("change", e => {
+  const input = e.target.closest("[data-select-study-deck]");
+  if (!input) return;
+  const deckId = input.dataset.selectStudyDeck;
+  if (input.checked) {
+    state.selectedStudyDeckIds.add(deckId);
+  } else {
+    state.selectedStudyDeckIds.delete(deckId);
+  }
+  updateDeckStudySelectionUi();
+});
+
 document.getElementById("studyClassBtn").addEventListener("click", () => chooseStudyOrder("class"));
 document.getElementById("quizClassBtn").addEventListener("click", () => chooseQuizSetup("class"));
 document.getElementById("startQuizBtn").addEventListener("click", startConfiguredQuiz);
-document.getElementById("exportGoogleFormsBtn").addEventListener("click", exportQuizToGoogleForms);
+document.getElementById("saveQuizDefaultBtn").addEventListener("click", saveQuizDefaults);
+document.getElementById("resetQuizDefaultBtn").addEventListener("click", resetQuizDefaults);
+document.getElementById("exportGoogleFormsBtn").addEventListener("click", generateQuizGoogleFormsScript);
+document.getElementById("copyGoogleFormsScriptBtn").addEventListener("click", copyGeneratedGoogleFormsScript);
+document.getElementById("downloadGoogleFormsScriptBtn").addEventListener("click", downloadGeneratedGoogleFormsScript);
 document.getElementById("quizTemplateInput").addEventListener("input", e => {
   state.quizConfig.template = e.target.value;
+  resetGoogleFormsGeneratedScript();
 });
+document.getElementById("quizQuestionCountInput").addEventListener("input", e => {
+  if (!state.pendingQuiz) return;
+  const availableCount = collectQuizCards(
+    state.pendingQuiz.scope,
+    state.pendingQuiz.deckId
+  ).length;
+  const value = Number(e.target.value);
+  if (Number.isFinite(value) && value > 0) {
+    state.quizConfig.questionCount = Math.min(availableCount, Math.floor(value));
+    state.quizConfig.questionCountMode = "fixed";
+    resetGoogleFormsGeneratedScript();
+  }
+});
+document.getElementById("quizUseAllQuestionsBtn").addEventListener("click", () => {
+  if (!state.pendingQuiz) return;
+  const availableCount = collectQuizCards(
+    state.pendingQuiz.scope,
+    state.pendingQuiz.deckId
+  ).length;
+  state.quizConfig.questionCount = availableCount;
+  state.quizConfig.questionCountMode = "all";
+  document.getElementById("quizQuestionCountInput").value = String(availableCount);
+  resetGoogleFormsGeneratedScript();
+});
+
+document.getElementById("quizManualSelectAllBtn").addEventListener("click", () => {
+  state.quizConfig.manualCardKeys = availableQuizCards().map(quizCardKey);
+  renderManualQuizPicker();
+  resetGoogleFormsGeneratedScript();
+});
+
+document.getElementById("quizManualClearBtn").addEventListener("click", () => {
+  state.quizConfig.manualCardKeys = [];
+  renderManualQuizPicker();
+  resetGoogleFormsGeneratedScript();
+});
+
+document.getElementById("quizManualCardList").addEventListener("change", e => {
+  const checkbox = e.target.closest("input[data-quiz-manual-card]");
+  if (!checkbox) return;
+
+  const selected = new Set(state.quizConfig.manualCardKeys || []);
+  const key = checkbox.dataset.quizManualCard;
+
+  if (checkbox.checked) selected.add(key);
+  else selected.delete(key);
+
+  state.quizConfig.manualCardKeys = [...selected];
+  document.getElementById("quizManualSelectionCount").textContent =
+    `${selected.size} of ${availableQuizCards().length} selected`;
+  resetGoogleFormsGeneratedScript();
+});
+
 document.getElementById("quizPointsInput").addEventListener("input", e => {
   const value = Math.max(0, Math.min(100, Number(e.target.value || 1)));
   state.quizConfig.points = value;
+  resetGoogleFormsGeneratedScript();
 });
 document.getElementById("quizCheckBtn").addEventListener("click", () => {
   answerQuizQuestion(document.getElementById("quizTypingInput").value);
@@ -2946,15 +4823,18 @@ document.getElementById("quizCheckBtn").addEventListener("click", () => {
 document.getElementById("quizTypingInput").addEventListener("keydown", e => {
   if (e.key === "Enter") {
     e.preventDefault();
-    answerQuizQuestion(e.target.value);
+    if (state.quizAnswered) nextQuizQuestion();
+    else answerQuizQuestion(e.target.value);
   }
 });
 document.getElementById("quizNextBtn").addEventListener("click", nextQuizQuestion);
 document.getElementById("exitQuizBtn").addEventListener("click", returnToClass);
 document.getElementById("quizBackToClassBtn").addEventListener("click", returnToClass);
 document.getElementById("quizTryAgainBtn").addEventListener("click", tryQuizAgain);
+document.getElementById("quizRetryMissedBtn").addEventListener("click", retryMissedQuizQuestions);
 
 document.getElementById("refreshLearnersBtn").addEventListener("click", loadLearners);
+document.getElementById("confirmRemoveLearnerBtn").addEventListener("click", confirmRemoveLearner);
 
 document.getElementById("revealBtn").addEventListener("click", e => {
   e.stopPropagation();
@@ -2963,9 +4843,11 @@ document.getElementById("revealBtn").addEventListener("click", e => {
 document.getElementById("exitStudyBtn").addEventListener("click", returnToClass);
 document.getElementById("studyAgainBtn").addEventListener("click", () => {
   if (state.studyScope === "class") {
-    startClassStudy(state.studyOrder);
+    startClassStudy(state.studyOrder, state.studyDirection);
+  } else if (state.studyScope === "selection") {
+    startSelectedDecksStudy(state.studySelectionDeckIds, state.studyOrder, state.studyDirection);
   } else if (state.selectedDeck) {
-    startDeckStudy(state.selectedDeck.id, state.studyOrder);
+    startDeckStudy(state.selectedDeck.id, state.studyOrder, state.studyDirection);
   }
 });
 document.getElementById("completeBackBtn").addEventListener("click", returnToClass);
@@ -2984,7 +4866,9 @@ document.getElementById("checkTypingBtn").addEventListener("click", () => {
     return;
   }
 
-  const correct = normalizeText(given) === normalizeText(card.back);
+  const direction = card._studyDirection || state.studyDirection || "frontBack";
+  const expected = direction === "backFront" ? card.front : card.back;
+  const correct = normalizeText(given) === normalizeText(expected);
   result.textContent = correct ? "Correct!" : "Not quite.";
   result.className = `typing-result ${correct ? "correct" : "incorrect"}`;
   document.getElementById("answerArea").classList.remove("hidden");
@@ -2997,6 +4881,39 @@ document.querySelector(".study-card").addEventListener("click", e => {
   if (targetIsInteractive(e.target)) return;
 
   toggleAnswerVisibility();
+});
+
+// Keyboard quiz controls:
+// A-D or 1-4 = choose a multiple-choice answer.
+// Enter or Right Arrow = move on after an answer is submitted.
+document.addEventListener("keydown", e => {
+  if (!quizViewIsOpen()) return;
+
+  const active = document.activeElement;
+  const tag = active?.tagName?.toLowerCase();
+  const isTypingField = tag === "input" || tag === "textarea" || active?.isContentEditable;
+
+  if (state.quizAnswered && !isTypingField && (e.key === "Enter" || e.key === "ArrowRight")) {
+    e.preventDefault();
+    nextQuizQuestion();
+    return;
+  }
+
+  if (state.quizAnswered || isTypingField) return;
+
+  const question = state.quizQuestions[state.quizIndex];
+  if (question?.type !== "multiple") return;
+
+  const key = String(e.key || "").toLowerCase();
+  const indexByKey = { a: 0, "1": 0, b: 1, "2": 1, c: 2, "3": 2, d: 3, "4": 3 };
+  const choiceIndex = indexByKey[key];
+  if (choiceIndex == null) return;
+
+  const button = document.querySelectorAll(".quiz-choice-btn")[choiceIndex];
+  if (!button || button.disabled) return;
+
+  e.preventDefault();
+  answerQuizQuestion(button.dataset.quizChoice);
 });
 
 // Keyboard study controls:
@@ -3028,6 +4945,16 @@ document.addEventListener("keydown", e => {
 
   e.preventDefault();
   rateCurrentCard(Number(e.key));
+});
+
+
+document.querySelectorAll("[data-study-direction]").forEach(button => {
+  button.addEventListener("click", () => {
+    state.studyDirection = button.dataset.studyDirection || "frontBack";
+    document.querySelectorAll("[data-study-direction]").forEach(btn => {
+      btn.classList.toggle("active", btn === button);
+    });
+  });
 });
 
 document.getElementById("progressiveOrderBtn").addEventListener("click", () => {
