@@ -86,13 +86,9 @@ document.querySelector('#retryQuiz').onclick=startQuiz;document.querySelector('#
 document.querySelector('#printQuizResults').onclick=()=>{document.body.classList.add('print-quiz');window.print()};
 window.addEventListener('afterprint',()=>document.body.classList.remove('print-quiz'));
 
-// Change only the Classroom Quiz's unshifted S'gaw Karen A key.
-// The regular typing/practice keyboard, Pwo Karen, English, and Shift+A keep their mappings.
-function quizRows(){
-  const base=rowsForLanguage(quizKeyboardLanguage);
-  if(quizKeyboardLanguage!=='ksw')return base;
-  return base.map(row=>row.map(([key,normal,shift])=>key==='a'?[key,'ရှ',shift]:[key,normal,shift]));
-}
+// Use the shared language layout so the Classroom Quiz matches the Typing Center.
+// Sgaw Karen A is mapped in app.js; Pwo Karen and English remain unchanged.
+function quizRows(){return rowsForLanguage(quizKeyboardLanguage)}
 // Quiz keyboards must never reveal answer-dependent hints, highlights, or automatic Shift changes.
 // Unlike typing practice, students choose their own keys and must recall each answer.
 function setQuizKeyboardLanguage(language){if(!['ksw','pwo','en'].includes(language)||quizLocked)return;quizKeyboardLanguage=language;quizKeyboardShifted=false;const typed=document.querySelector('#quizTypedAnswer');if(typed)typed.lang=quizKeyboardTag(language);renderQuizKeyboard();typed?.focus()}
