@@ -9,10 +9,10 @@
   <link rel="icon" type="image/png" href="../logo.png" />
   <link rel="stylesheet" href="../padauk.css?v=20261023-1" />
   <link rel="stylesheet" href="../creator-credit.css?v=20260912-1" />
-  <link rel="stylesheet" href="../type-page.css?v=20261024-font-preview-fix-2" />
+  <link rel="stylesheet" href="../type-page.css?v=20261024-cfcr-live-1" />
   <script src="../typing-layouts.js?v=20261023-1" defer></script>
   <script src="../type-page.js?v=20261023-typing-placeholder-1" defer></script>
-  <script src="../type-font-studio.js?v=20261024-font-gallery-1" defer></script>
+  <script src="../type-font-studio.js?v=20261024-cfcr-live-1" defer></script>
 </head>
 <body class="gln-type-page">
   <div class="type-shell" id="typeShell">
@@ -55,11 +55,21 @@
       <details class="legacy-font-studio" id="legacyFontStudio">
         <summary class="legacy-font-summary">
           <span class="legacy-font-summary-icon" aria-hidden="true">Aa</span>
-          <span class="legacy-font-summary-copy"><strong>Explore Karen Font Styles <span class="legacy-font-count">90 styles</span></strong><small>Browse the original Saw Cfcr designs · Visual samples only</small></span>
+          <span class="legacy-font-summary-copy"><strong>Explore Karen Font Styles <span class="legacy-font-count">90 styles</span></strong><small>90 designs · Experiment with your own text</small></span>
           <span class="legacy-font-summary-action">Browse styles <span aria-hidden="true">▾</span></span>
         </summary>
         <div class="legacy-font-body">
-          <div class="legacy-font-notice" role="note"><strong>Unicode stays safe.</strong> These are samples drawn from the original legacy fonts, not converted Unicode fonts. Selecting a style previews its design; it does <strong>not</strong> change the Unicode editor or copied text.</div>
+          <div class="legacy-font-notice" role="note"><strong>Unicode stays safe.</strong> Browse the original font samples below. To test a design with your own Sgaw Karen text, load the Saw Cfcr ZIP <strong>from your device</strong>. The original Unicode editor, Copy, and TXT download stay unchanged. This converter is experimental; compare the results before using them in class.</div>
+          <div class="cfcr-local-controls" aria-label="Try the original Saw Cfcr fonts locally">
+            <div class="cfcr-file-control"><label for="cfcrLocalFonts" class="cfcr-local-label"><span aria-hidden="true">↥</span> Load my Saw Cfcr fonts</label><input id="cfcrLocalFonts" type="file" accept=".zip,.ttf,.TTF" multiple /><small>Choose your original <strong>Karen Sgaw (Saw Cfcr).zip</strong>, or select multiple TTFs. Fonts stay in this browser session and are never sent to the website.</small></div>
+            <div id="cfcrFontStatus" class="cfcr-font-status" role="status" aria-live="polite">Choose a local font collection to enable the experimental live preview.</div>
+          </div>
+          <section class="cfcr-live-panel" aria-label="Experimental styled text preview">
+            <div class="cfcr-live-head"><div><span class="type-setting-label">LIVE TEXT PREVIEW · EXPERIMENTAL</span><h3 id="cfcrActiveStyle">Saw cfcr000</h3></div><span class="cfcr-safety-label">Unicode source preserved</span></div>
+            <div id="cfcrLivePreview" class="cfcr-live-surface" lang="ksw" role="region" aria-label="Visual preview of current typed text">ကညီကျိာ်</div>
+            <p id="cfcrPreviewStatus" class="cfcr-live-status" aria-live="polite">Load the original fonts to see an experimental Saw Cfcr rendering.</p>
+            <p id="cfcrFallbackHint" class="cfcr-live-note">This preview is not a Unicode font conversion; the editor continues using Unicode.</p>
+          </section>
           <div class="legacy-font-tools">
             <label class="legacy-font-search-field"><span>Find a style</span><input id="legacyFontSearch" type="search" placeholder="Search number, e.g. 014" autocomplete="off" /></label>
             <button id="legacyFontFavoritesOnly" class="control-btn" type="button" aria-pressed="false">☆ Favorites only</button>
@@ -70,7 +80,7 @@
           <div class="legacy-font-selection" id="legacyFontSelection" aria-live="polite" hidden>
             <div><span class="type-setting-label">SELECTED LEGACY DESIGN</span><h3 id="legacyFontSelectedName">Saw cfcr000</h3><p>Original sample keys: <code>Aa Bb Cc Qq Ww 1234</code></p></div>
             <div id="legacyFontSelectedPreview" class="legacy-font-selected-preview" role="img" aria-label="Original legacy font visual sample"></div>
-            <p>Future Unicode conversion will be needed before this design can safely format typed Karen text. Current typing, drafts, keyboard, and Unicode copying remain unchanged.</p>
+            <p>Select a font and load your original TTF collection below to experiment with the text you type.</p>
           </div>
         </div>
       </details>
