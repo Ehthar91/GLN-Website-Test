@@ -281,3 +281,61 @@
 
 /* Desktop/Chromebook learning hint: both Shift keys glow only when Shift is required. */
 .keyboard .key.desktop-shift-hint{border-color:#f0b429!important;background:#fff1b8!important;color:#6b4600!important;box-shadow:0 0 0 3px rgba(240,180,41,.24),0 0 18px rgba(240,180,41,.34)!important}
+
+/* GLN Guided Typing Tutor: original UI, inspired by exercise-first typing tutors. */
+.practice-view{max-width:1240px}
+.practice-subheading{margin:10px 0 0;color:#657994;font-size:.91rem;line-height:1.5}
+.practice-head-badge{padding:9px 13px;background:#e7f5fa;border:1px solid #c6e7f0;color:#117e9b;border-radius:999px;font-weight:800;font-size:.75rem;white-space:nowrap}
+.practice-controls{display:flex;gap:12px;align-items:end;background:rgba(255,255,255,.78);padding:15px;border:1px solid #dae5f0;border-radius:16px;box-shadow:0 6px 22px rgba(20,42,69,.035);margin-bottom:14px;flex-wrap:wrap}
+.practice-controls .lesson-picker{display:flex;flex:1 1 175px;flex-direction:column;align-items:stretch;gap:6px;color:#526b88;font-size:.72rem;text-transform:uppercase;letter-spacing:.09em}
+.practice-controls .lesson-picker select{width:100%;min-width:0;min-height:43px;color:#1d3658;border-radius:10px;background:#fff}
+.practice-restart-top{min-height:43px;flex:0 0 auto}
+.practice-stats{grid-template-columns:repeat(4,minmax(0,1fr))}
+.practice-stats div{padding:15px 18px;background:linear-gradient(150deg,#fff,#f7fbff)}
+.practice-stats strong{font-variant-numeric:tabular-nums}
+.practice-stats #errorsStat{color:#bc4b47}
+.practice-lesson-card{padding:22px 24px 18px}
+.practice-reference-label{font-size:.7rem;font-weight:850;letter-spacing:.13em;color:#7b91ac;margin-bottom:5px}
+.practice-target{min-height:108px;max-height:260px;overflow-y:auto;line-height:1.95;background:#f9fcff;border:1px solid #e7eef7;border-radius:11px;padding:12px 16px;color:#9aa8b9!important;margin:5px 0 15px;font-size:clamp(1.45rem,2.7vw,2rem);word-break:break-word}
+.practice-target span{white-space:pre-wrap}
+.practice-target .done{color:#159274}
+.practice-target .current{display:inline;border-radius:4px;color:#17365a;background:#d6eaff;border-bottom:3px solid #2883eb;padding:0 1px}
+.practice-target .pending{color:#9eacc1}
+.practice-input-label{display:block;font-size:.72rem;font-weight:850;letter-spacing:.1em;color:#627891;text-transform:uppercase;margin-bottom:8px}
+.practice-view .practice-type-input{width:100%;min-height:65px;border:2px solid #cdddeb;border-radius:12px;background:#fff;padding:11px 17px;outline:0;color:#173554;font:500 clamp(1.24rem,2.8vw,1.8rem)/1.7 Padauk,'Noto Sans Myanmar',sans-serif;box-shadow:inset 0 2px 5px rgba(31,56,78,.02)}
+.practice-view .practice-type-input:focus{border-color:#2e89df;box-shadow:0 0 0 4px rgba(46,137,223,.13)}
+.practice-view .practice-type-input.wrong{border-color:#c64b4b;background:#fff5f4}
+.practice-view .practice-type-input::placeholder{color:#a9b6c6}
+.practice-feedback-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:6px;flex-wrap:wrap}
+.practice-feedback-row .type-prompt{text-align:left;margin:6px 0;color:#687b93}
+.practice-completion{font-size:.82rem;font-weight:800;color:#12806a}
+.practice-guide-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(190px,.8fr);gap:14px;margin-bottom:16px}
+.practice-finger-card,.practice-next-card{background:white;border:1px solid #dae5f0;border-radius:16px;padding:18px 20px;min-height:150px;box-shadow:0 7px 22px rgba(20,42,69,.04)}
+.practice-finger-heading{display:flex;align-items:center;gap:11px}
+.practice-guide-icon{height:35px;width:35px;display:grid;place-items:center;border-radius:11px;background:#e6f4fc;font-size:1.15rem}
+.practice-finger-heading strong{display:block;font-size:.93rem;color:#183555}
+.practice-finger-heading small{display:block;font-size:.72rem;color:#7d90a5;margin-top:3px}
+.practice-guide-content{display:flex;gap:14px;align-items:center;margin:13px 0 7px}
+.practice-finger-key{display:grid;place-items:center;min-width:49px;height:53px;background:#e8f3fc;border:1px solid #bfdbf0;border-bottom:4px solid #8aafcc;border-radius:10px;font:800 1.1rem Inter,Padauk,sans-serif;color:#174b78;padding:0 8px}
+.practice-guide-content strong{color:#183555;font-size:.96rem}
+.practice-guide-content p,.practice-next-card p{color:#6c8198;margin:4px 0 0;font-size:.77rem;line-height:1.45}
+.practice-guide-tip{margin:0;color:#6d819a;font-size:.75rem}
+.practice-next-card{display:flex;align-items:center;flex-direction:column;justify-content:center;text-align:center;background:linear-gradient(145deg,#fff,#edf7ff)}
+.practice-next-card>span{font-size:.69rem;color:#7494b0;letter-spacing:.13em;font-weight:900}
+.practice-next-key{font-size:2rem;line-height:1.3;font-weight:850;color:#2362a4;font-family:Inter,Padauk,sans-serif;margin:6px 0}
+.practice-keyboard-title{display:block;color:#183555;font-size:1rem}
+.practice-keyboard-caption{display:block;color:#7990a8;font-size:.74rem;margin-top:4px}
+.practice-keyboard-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap;justify-content:end}
+.practice-guide-toggle{border:1px solid #d0e1ec;background:#eef5fa;border-radius:9px;padding:9px 12px;color:#335978;font:700 .76rem Inter,sans-serif;cursor:pointer}
+.practice-guide-toggle[aria-pressed=false]{background:#fff}
+.practice-keyboard-card .key.expected{border-color:#1373d1!important;background:linear-gradient(#dbefff,#bddeff)!important;box-shadow:0 0 0 3px rgba(35,127,221,.16),0 3px 7px rgba(17,85,160,.16)!important}
+.practice-keyboard-card .key.practice-finger-highlight:not(.expected){border-color:#96cbb9;background:#effbf6;box-shadow:0 0 0 2px rgba(46,152,119,.12)}
+.practice-keyboard-card .key.wrong{background:#ffe3df!important;border-color:#bf4444!important}
+.practice-view.practice-guide-hidden .practice-finger-card{display:none}
+.practice-view.practice-guide-hidden .practice-guide-grid{grid-template-columns:1fr}
+@media(max-width:780px){.practice-stats{grid-template-columns:repeat(2,1fr)}.practice-head-badge{display:none}.practice-controls{gap:10px}.practice-controls .lesson-picker{flex:1 1 130px}.practice-guide-grid{grid-template-columns:1fr}.practice-controls .practice-restart-top{flex:1 1 100%;}.practice-keyboard-card .keyboard-top{align-items:flex-start;gap:12px;flex-direction:column}.practice-keyboard-actions{width:100%;justify-content:space-between}}
+@media(max-width:520px){.practice-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.practice-controls .lesson-picker:first-child{grid-column:span 2}.practice-controls .practice-restart-top{grid-column:span 2}.practice-lesson-card{padding:15px 12px}.practice-stats div{padding:11px 12px}.practice-finger-card,.practice-next-card{padding:13px}.practice-target{font-size:1.5rem}.practice-input-label{margin-top:2px}}
+body.theme-rgb #practiceView .practice-controls, body.theme-rgb #practiceView .practice-finger-card, body.theme-rgb #practiceView .practice-next-card{background:linear-gradient(140deg,#14283e,#1a3552);color:#e1efff;border-color:#36516b}
+body.theme-rgb #practiceView .practice-controls .lesson-picker,body.theme-rgb #practiceView .practice-finger-heading strong,body.theme-rgb #practiceView .practice-guide-content strong,body.theme-rgb #practiceView .practice-keyboard-title{color:#e0efff}
+body.theme-rgb #practiceView .practice-finger-card p,body.theme-rgb #practiceView .practice-next-card p{color:#abc0d5}
+body.theme-rgb #practiceView .practice-head-badge{background:#183f59;color:#bfeafc}

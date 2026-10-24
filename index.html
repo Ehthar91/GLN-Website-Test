@@ -14,7 +14,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <link rel="stylesheet" href="padauk.css?v=20260910-6" />
   <link rel="stylesheet" href="styles.css?v=20261023-type-studio-link-polish-1" />
-  <link rel="stylesheet" href="practice.css?v=20260915-shift-hint-1" />
+  <link rel="stylesheet" href="practice.css?v=20261023-guided-tutor-1" />
   <link rel="stylesheet" href="games.css?v=20260915-game-contrast-1" />
   <link rel="stylesheet" href="custom-games.css?v=20260915-game-contrast-1" />
   <link rel="stylesheet" href="race.css?v=20260911-8" />
@@ -975,41 +975,72 @@ Taylor</textarea><small>Enter one student per line.</small></label>
     </section>
 
     <section class="workspace practice-view" id="practiceView" aria-labelledby="practice-title" hidden>
-      <div class="practice-head">
-        <div><p class="eyebrow" id="practiceEyebrow">KAREN TYPING PRACTICE</p><h1 id="practice-title">Learn one key at a time</h1></div>
+      <header class="practice-head">
+        <div>
+          <p class="eyebrow" id="practiceEyebrow">KAREN TYPING PRACTICE</p>
+          <h1 id="practice-title">GLN Typing Tutor</h1>
+          <p class="practice-subheading">Build accuracy first, then speed. Follow the highlighted key and finger guide as you type.</p>
+        </div>
+        <span class="practice-head-badge">⌨ Guided practice</span>
+      </header>
+      <div class="practice-controls" aria-label="Choose typing practice">
+        <label class="lesson-picker">Level
+          <select id="practiceLevel" aria-label="Choose practice level">
+            <option value="0">Beginner</option>
+            <option value="1">Intermediate</option>
+            <option value="2">Advanced</option>
+          </select>
+        </label>
         <label class="lesson-picker">Lesson
           <select id="lessonSelect" aria-label="Choose a typing lesson"></select>
         </label>
+        <label class="lesson-picker">Exercise
+          <select id="practiceExercise" aria-label="Choose exercise length">
+            <option value="0">1 · Warm-up</option>
+            <option value="1">2 · Guided practice</option>
+            <option value="2">3 · Challenge</option>
+          </select>
+        </label>
+        <button class="button ghost practice-restart-top" id="restartLesson" type="button">↻ Restart</button>
       </div>
-
-      <div class="stats-grid" aria-label="Practice statistics">
-        <div><strong id="progressStat">0%</strong><span>Progress</span></div>
-        <div><strong id="accuracyStat">100%</strong><span>Accuracy</span></div>
+      <div class="stats-grid practice-stats" aria-label="Live typing practice statistics">
         <div><strong id="wpmStat">0</strong><span>WPM</span></div>
+        <div><strong id="accuracyStat">100%</strong><span>Accuracy</span></div>
+        <div><strong id="errorsStat">0</strong><span>Errors</span></div>
+        <div><strong id="progressStat">0%</strong><span>Progress</span></div>
       </div>
-
-      <div class="lesson-card">
-        <div class="lesson-meta"><span id="lessonNumber">Lesson 1</span><span id="lessonFocus">Basic letters</span></div>
-        <div class="progress-track"><span id="progressBar"></span></div>
-        <div class="target-text" id="targetText" lang="ksw" aria-live="polite" style="color:#17233b;position:relative"></div>
-        <p class="type-prompt" id="typePrompt">Start typing with your English keyboard.</p>
-        <div class="lesson-actions">
-          <button class="button ghost" id="restartLesson" type="button">↻ Restart</button>
-          <button class="button primary" id="nextLesson" type="button" hidden>Next lesson →</button>
+      <div class="lesson-card practice-lesson-card">
+        <div class="lesson-meta"><span id="lessonNumber">Beginner · Lesson 1</span><span id="lessonFocus">Basic letters</span></div>
+        <div class="progress-track" role="progressbar" aria-label="Exercise progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="practiceProgressTrack"><span id="progressBar"></span></div>
+        <div class="practice-reference-label">TYPE THE TEXT BELOW</div>
+        <div class="target-text practice-target" id="targetText" lang="ksw" aria-label="Exercise text"></div>
+        <label class="practice-input-label" for="practiceInput">Your typing</label>
+        <input id="practiceInput" class="practice-type-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Click here and start typing…" aria-describedby="typePrompt" />
+        <div class="practice-feedback-row">
+          <p class="type-prompt" id="typePrompt" role="status" aria-live="polite">Select the typing box to start.</p>
+          <span class="practice-completion" id="practiceCompletion" aria-live="polite"></span>
         </div>
+        <div class="lesson-actions"><button class="button primary" id="nextLesson" type="button" hidden>Next lesson →</button></div>
       </div>
-
+      <div class="practice-guide-grid">
+        <div class="practice-finger-card" id="practiceFingerCard">
+          <div class="practice-finger-heading"><span class="practice-guide-icon">☝</span><div><strong>Finger guide</strong><small>Which finger should I use?</small></div></div>
+          <div class="practice-guide-content"><div class="practice-finger-key" id="practiceFingerKey">A</div><div><strong id="practiceFingerName">Left pinky</strong><p id="practiceFingerInstruction">Use your left pinky for A.</p></div></div>
+          <p class="practice-guide-tip" id="practiceShiftTip">Keep your fingers near the home row.</p>
+        </div>
+        <div class="practice-next-card"><span>COMING UP</span><div class="practice-next-key" id="nextKey">—</div><p>Follow the highlighted key on the on-screen keyboard.</p></div>
+      </div>
       <section class="keyboard-card practice-keyboard-card" aria-label="Practice keyboard">
         <div class="keyboard-top">
-          <div class="mode-switch" role="group" aria-label="Practice keyboard layer">
-            <button class="active" id="practiceNormal" type="button">Normal</button>
-            <button id="practiceShift" type="button">Shift</button>
+          <div><strong class="practice-keyboard-title">Keyboard guide</strong><small class="practice-keyboard-caption">Keys follow your selected GLN language layout</small></div>
+          <div class="practice-keyboard-actions">
+            <div class="mode-switch" role="group" aria-label="Practice keyboard layer"><button class="active" id="practiceNormal" type="button">Normal</button><button id="practiceShift" type="button">Shift</button></div>
+            <button type="button" class="practice-guide-toggle" id="practiceGuideToggle" aria-pressed="true">Finger guide on</button>
           </div>
-          <span class="next-key-label">Next key: <strong id="nextKey">—</strong></span>
         </div>
         <div class="keyboard" id="practiceKeyboard"></div>
       </section>
-      <p class="privacy"><span aria-hidden="true">●</span> Practice progress is saved on this device.</p>
+      <p class="privacy"><span aria-hidden="true">●</span> Practice is private. Your last lesson is remembered on this device.</p>
     </section>
   </main>
   <aside class="creator-credit" id="creatorCredit" aria-label="Website creator">
@@ -1028,7 +1059,7 @@ Taylor</textarea><small>Enter one student per line.</small></label>
   <div class="toast" id="toast" role="status" aria-live="polite">Copied to clipboard</div>
   <script src="typing-layouts.js?v=20261023-1"></script>
   <script src="app.js?v=20261023-typing-placeholder-1"></script>
-  <script src="practice.js?v=20261023-type-tab-return-fix-1"></script>
+  <script src="practice.js?v=20261023-guided-tutor-1"></script>
   <script src="games.js?v=20260915-unified-keyboard-1"></script>
   <script src="custom-games.js?v=20260915-unified-keyboard-1"></script>
   <script src="race.js?v=20260915-unified-keyboard-1"></script>
