@@ -279,3 +279,105 @@ body.theme-rgb .tug-score-card:hover{background:rgba(103,181,255,.055)}
   .tug-teacher-arena .tug-live-avatars .tug-avatar-art,
   #tugWorld .tug-player-team .tug-avatar-art{max-height:91px!important;max-width:72px!important}
 }
+
+/* v3: restore an actual full-height player rope overlay and avoid clipping avatars. */
+#tugWorld{
+  min-height:336px!important;
+  grid-template-rows:minmax(298px,auto)!important;
+  padding:12px 20px 18px!important;
+  overflow:hidden;
+}
+#tugWorld .tug-player-rope{
+  position:absolute!important;
+  grid-row:auto!important;
+  grid-column:auto!important;
+  inset:0!important;
+  display:block!important;
+  width:100%!important;
+  height:100%!important;
+  box-sizing:border-box!important;
+  align-self:stretch!important;
+  justify-self:stretch!important;
+  min-height:0!important;
+  margin:0!important;
+  padding:0!important;
+  z-index:5!important;
+  pointer-events:none;
+}
+#tugWorld .tug-player-rope>.tug-rope-line{
+  position:absolute!important;
+  left:12%!important;
+  right:auto!important;
+  top:64%!important;
+  width:76%!important;
+  height:18px!important;
+  margin:0!important;
+  z-index:3;
+}
+#tugWorld .tug-player-rope>p{
+  position:absolute!important;
+  left:50%!important;right:auto!important;
+  top:56px!important;bottom:auto!important;
+  transform:translateX(-50%)!important;
+  margin:0!important;
+  max-width:60%!important;
+  font-size:.8rem!important;
+  line-height:1.35!important;
+  text-align:center;
+  white-space:normal;
+  z-index:2;
+}
+#tugWorld .tug-player-team{
+  min-height:298px!important;
+  position:relative!important;
+  overflow:visible!important;
+  z-index:3!important;
+}
+#tugWorld .tug-player-team>div{
+  display:flex!important;
+  align-items:flex-end!important;
+  justify-content:flex-start;
+  flex-wrap:nowrap!important;
+  width:100%;min-width:0;
+  min-height:185px!important;
+  max-height:none!important;
+  overflow:visible!important;
+  padding:0 10px 26px!important;
+  margin:0!important;
+  gap:7px!important;
+}
+#tugWorld .tug-player-team.red>div{justify-content:flex-start!important}
+#tugWorld .tug-player-team.blue>div{justify-content:flex-end!important}
+#tugWorld .tug-player-team .tug-character{
+  flex:0 1 94px!important;
+  min-width:60px!important;
+  max-width:98px!important;
+}
+#tugWorld .tug-player-team .tug-character-stage{
+  min-height:106px!important;
+  height:110px!important;
+  overflow:visible!important;
+}
+#tugWorld .tug-player-team .tug-avatar-art{
+  max-height:108px!important;
+  max-width:90px!important;
+}
+#tugWorld .tug-player-team .tug-character-name,
+#tugWorld .tug-player-team .tug-character-meta{
+  display:block;
+  font-size:.65rem;
+  line-height:1.15;
+  overflow:hidden;
+  white-space:nowrap;
+  text-overflow:ellipsis;
+}
+@media(max-width:620px){
+ #tugWorld{min-height:268px!important;grid-template-rows:minmax(234px,auto)!important;padding:9px!important}
+ #tugWorld .tug-player-team{min-height:234px!important}
+ #tugWorld .tug-player-team>div{min-height:152px!important;padding:0 4px 20px!important;gap:3px!important}
+ #tugWorld .tug-player-team .tug-character{min-width:48px!important;max-width:69px!important;flex-basis:66px!important}
+ #tugWorld .tug-player-team .tug-character-stage{height:80px!important;min-height:80px!important}
+ #tugWorld .tug-player-team .tug-avatar-art{max-height:79px!important;max-width:65px!important}
+ #tugWorld .tug-player-rope>.tug-rope-line{top:62%!important;height:14px!important}
+ #tugWorld .tug-player-rope>p{top:42px!important;max-width:65%!important;font-size:.68rem!important}
+}
