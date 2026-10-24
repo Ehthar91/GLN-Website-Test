@@ -137,26 +137,69 @@
   const loadControls = $('cfcrLoadControls');
   if (!editor || !preview || !upload) return;
 
-  // Historic Sgaw Karen keyboard encoding. Map only symbols supported by the
-  // reference. Unmapped Myanmar words remain in Unicode Padauk (never guessed).
+  // Saw Cfcr is a legacy font, not Unicode. The source keyboard layout gives
+  // us candidate positions, but many additional glyphs are precomposed.
+  // This *conservative* chart contains only individual glyph positions that
+  // have been compared with the actual Saw cfcr016 outline and a Unicode
+  // reference. In particular, the older chart had YA and RA assigned to
+  // visibly different symbols. Unknown clusters stay ENTIRELY in Unicode.
   const pairs = [
-    [0x1000,'u'],[0x1001,'c'],[0x1002,'*'],[0x1003,'C'],[0x1004,'i'],
-    [0x1005,'p'],[0x1006,'q'],[0x1050,'S'],[0x100A,'n'],[0x1010,'w'],
-    [0x1011,'x'],[0x1012,"'"],[0x1014,'e'],[0x1015,'y'],[0x1016,'z'],
-    [0x1018,'b'],[0x1019,'r'],[0x101A,'<'],[0x101B,'\\'],[0x101C,'v'],
-    [0x101D,'0'],[0x101E,'o'],[0x101F,'['],[0x1021,'t'],[0x1027,'{'],
-    [0x102C,'g'],[0x1036,'H'],[0x1051,'U'],[0x102F,'k'],[0x1030,'l'],
-    [0x1037,'h'],[0x1032,'J'],[0x102D,'d'],[0x102E,'D'],
-    [0x1052,'I'],[0x1053,'P'],[0x1038,';'],[0x1054,'O'],[0x1055,':'],
-    [0x103E,'S'],[0x103B,'a'],[0x103C,']'],[0x103D,'G'],
-    [0x103A,'f'],[0x104A,','],[0x104B,'.']
+    [0x1000,'u'], [0x1001,'c'], [0x1002,'*'], [0x1003,'C'], [0x1004,'i'],
+    [0x1005,'p'], [0x1006,'q'], [0x100A,'n'], [0x1010,'w'], [0x1011,'x'],
+    [0x1012,"'"], [0x1014,'e'], [0x1015,'y'], [0x1016,'z'],
+    [0x1018,'b'], [0x1019,'r'], [0x101A,','], [0x101B,'s'],
+    [0x101C,'v'], [0x101D,'0'], [0x101E,'o'], [0x101F,'['],
+    [0x1021,'t'], [0x1027,'{'],
+    // These stand-alone signs have recognizable positioning glyphs in CFCR.
+    // A complete syllable is used for rendering only when EVERY codepoint is
+    // in this conservative chart. Nonverified Karen vowels/tones stay Unicode.
+    [0x102C,'g'], [0x102D,'d'], [0x102E,'D'], [0x102F,'k'],
+    [0x1030,'l'], [0x1032,'J'], [0x1036,'H'], [0x1037,'h'],
+    [0x1038,';'], [0x103A,'f'], [0x103B,'a']
   ];
-  for (let digit=0;digit<=9;digit++) pairs.push([0x1040+digit,String(digit)]);
+  // Do NOT automatically map U+1062/1063/1064 (Karen vowel and tones),
+  // medials U+103C/103D/103E, stacked U+1039, or uncommon signs.
+  // The earlier heuristic assigned some of these to unrelated CFCR glyphs.
   const legacyMap = new Map(pairs.map(([code, value]) => [String.fromCodePoint(code),value]));
   const isMyanmar = ch => /[\u1000-\u109f\uAA60-\uAA7f]/u.test(ch);
-  // A Myanmar syllable is kept together. Missing Karen-specific marks never
-  // prevent the *rest* of the sentence from using a legacy style.
-  const isMyanmarBase = ch => /[\u1000-\u102a\u103f-\u1057\u1060-\u1061\uAA60-\uAA7f]/u.test(ch);
+  const isMyanmarBase = ch => /[\u1000-\u102a\u103f-\u1057\uAA60-\uAA7f]/u.test(ch);
+  const isJoiner = ch => ch==='\u200c' || ch==='\u200d';
+  // Catch sequences with stacking and special controls as one logical unit.
+  function isSensitive(ch) { return ch==='\u1039' || isJoiner(ch); }
+  function convertUnicode(source) {
+    let converted=0,total=0,fallback=0;
+    const runs=[];
+    const append=(text,legacy,missing=false)=>{
+      if(!text)return;
+      const last=runs[runs.length-1];
+      if(last && last.legacy===legacy && last.missing===missing)last.text+=text;
+      else runs.push({text,legacy,missing});
+    };
+    let syllable='';
+    const flush=()=>{
+      if(!syllable)return;
+      total++;
+      const chars=[...syllable];
+      if(chars.every(ch=>legacyMap.has(ch))){
+        converted++;append(chars.map(ch=>legacyMap.get(ch)).join(''),true);
+      } else {
+        fallback++;append(syllable,false,true);
+      }
+      syllable='';
+    };
+    // Use whole syllables: an unmapped tone or medial must never detach from
+    // its base. For example, ကၢ် remains a single shaped Unicode run rather
+    // than a legacy Ka with a floating Unicode vowel or asat.
+    for(const ch of source){
+      if(!isMyanmar(ch) && !isSensitive(ch)){
+        flush();append(ch,false);continue;
+      }
+      if(isMyanmarBase(ch) && syllable && !syllable.endsWith('\u1039') && !syllable.endsWith('\u200d'))flush();
+      syllable+=ch;
+    }
+    flush();
+    return {runs,converted,total,fallback,mapped:converted,fallbacks:fallback};
+  }
   const localFiles = new Map();
   const loadedFonts = new Map();
   let currentStyle = (()=>{try{return localStorage.getItem('glnSawCfcrSelectedV2') || '000'}catch{return '000'}})();
@@ -165,36 +208,6 @@
   let archive = null;
   let actionVersion = 0;
   let userPickedFiles = false;
-
-  // Count real syllables, not whole words. Unknown syllables remain Padauk.
-  function convertUnicode(source) {
-    let converted = 0, total = 0, fallback = 0;
-    const runs = [];
-    const add = (text,legacy,missing=false)=>{
-      if(!text)return;
-      const last=runs[runs.length-1];
-      if(last && last.legacy===legacy && last.missing===missing)last.text+=text;
-      else runs.push({text,legacy,missing});
-    };
-    let pending='';
-    const flush=()=>{
-      if(!pending)return;
-      total++;
-      const chars=[...pending];
-      if(chars.every(char=>legacyMap.has(char))) {
-        converted++;
-        add(chars.map(ch=>legacyMap.get(ch)).join(''),true);
-      } else {fallback++;add(pending,false,true);}
-      pending='';
-    };
-    for(const ch of source){
-      if(!isMyanmar(ch)) {flush();add(ch,false);continue;}
-      if(isMyanmarBase(ch) && pending)flush();
-      pending+=ch;
-    }
-    flush();
-    return {runs,converted,total,fallback,mapped:converted,fallbacks:fallback};
-  }
 
   // User-provided ZIP/TTFs are cached locally in IndexedDB; never uploaded.
   const DB_NAME='glnSawCfcrLocalFontsV1';
@@ -256,10 +269,10 @@
       preview.append(span);
     }
     detail.textContent = result.fallback
-      ? 'Some syllables remain in the standard Unicode font because their legacy equivalents are not verified.'
+      ? `${result.fallback} syllable${result.fallback===1?'':'s'} kept in Unicode for accuracy. Unverified vowels and tone marks are not converted.`
       : 'This preview uses the selected vintage font. Check the appearance of vowel and tone marks.';
     if(editor.value.length>8000)detail.textContent += ' Preview shows the first 8,000 characters.';
-    pasteHint.textContent = 'Preview only — Copy and Download TXT still use correct Unicode text. Verify this vintage design before printing.';
+    pasteHint.textContent = 'Preview only — Copy and Download TXT still use correct Unicode text. Not all combinations are supported; check the vintage style before printing.';
   }
 
   function parseZip(file) {

@@ -90,3 +90,6 @@ body.theme-rgb .cfcr-live-panel{background:#112238}body.theme-rgb .cfcr-safety-l
 .cfcr-local-controls.cfcr-is-ready .cfcr-local-label{font-size:0}
 .cfcr-local-controls.cfcr-is-ready .cfcr-local-label::before{font-size:.73rem}
 .cfcr-live-surface{min-height:145px}
+
+/* Unverified Karen syllables retain normal Unicode shaping; no misleading highlight blocks. */
+.cfcr-live-surface .cfcr-unmapped{background:transparent;color:inherit;border-bottom:1px dotted rgba(100,117,139,.5)}
