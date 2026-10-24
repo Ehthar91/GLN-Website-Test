@@ -339,3 +339,16 @@ body.theme-rgb #practiceView .practice-controls, body.theme-rgb #practiceView .p
 body.theme-rgb #practiceView .practice-controls .lesson-picker,body.theme-rgb #practiceView .practice-finger-heading strong,body.theme-rgb #practiceView .practice-guide-content strong,body.theme-rgb #practiceView .practice-keyboard-title{color:#e0efff}
 body.theme-rgb #practiceView .practice-finger-card p,body.theme-rgb #practiceView .practice-next-card p{color:#abc0d5}
 body.theme-rgb #practiceView .practice-head-badge{background:#183f59;color:#bfeafc}
+
+/* Source-preserving curriculum selector: GLN keyboard remains unchanged. */
+.practice-course-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 7px}
+.practice-course-picker{display:flex;align-items:center;gap:10px;font-size:.8rem;font-weight:750;color:#45617d}
+.practice-course-picker select{border:1px solid #c5d7e7;border-radius:10px;padding:10px 12px;background:white;color:#153653;min-height:42px;font:inherit}
+.practice-course-row .button{min-height:41px;font-size:.78rem}
+.practice-course-status{font-size:.72rem;color:#6a7e93;flex:1 1 210px}
+.practice-source-credit{font-size:.73rem;line-height:1.5;color:#6883a0;margin:0 0 10px}.practice-source-credit a{color:#117c9f;text-decoration:underline}.practice-source-credit[hidden]{display:none}
+.practice-course-notice{margin:0 0 14px;padding:8px 12px;background:#e7f3fb;border-left:3px solid #18a0bb;color:#355774;border-radius:6px;font-size:.79rem;line-height:1.55}
+body.theme-rgb #practiceView .practice-course-picker,body.theme-rgb #practiceView .practice-course-status{color:#abc6df}
+body.theme-rgb #practiceView .practice-course-picker select{color:#e9f7ff;background:#142940;border-color:#3d5d79}
+body.theme-rgb #practiceView .practice-course-notice{background:rgba(25,67,88,.64);color:#c4def0;border-left-color:#39dbed}
+@media(max-width:650px){.practice-course-row{align-items:stretch}.practice-course-picker{flex:1 1 100%;align-items:stretch;flex-direction:column}.practice-course-status{flex:1 1 100%}}

@@ -984,6 +984,20 @@ Taylor</textarea><small>Enter one student per line.</small></label>
         </div>
         <span class="practice-head-badge">⌨ Guided practice</span>
       </header>
+      <div class="practice-course-row">
+        <label class="practice-course-picker" for="practiceCourse">Practice course
+          <select id="practiceCourse" aria-label="Choose practice curriculum">
+            <option value="gln">GLN guided lessons</option>
+            <option value="kawthoolei">Kawthoolei original exercises (available only)</option>
+          </select>
+        </label>
+        <button class="button ghost" id="practicePackUpload" type="button">Import original lesson pack (.json)</button>
+        <input id="practicePackFile" type="file" accept=".json,application/json" hidden />
+        <button class="button ghost" id="practicePackReset" type="button" hidden>Remove imported lessons</button>
+        <span class="practice-course-status" id="practicePackStatus" role="status">Original lesson pack: not installed</span>
+      </div>
+      <p id="practiceCourseNotice" class="practice-course-notice" aria-live="polite"></p>
+      <p id="practiceSourceCredit" class="practice-source-credit" hidden>Original exercise source: © 2024 Kawthoolei Unicode · Typing Tutors software MIT license · <a href="https://www.kawthooleiunicode.org/copyrights" target="_blank" rel="noopener noreferrer">License and attribution</a>.</p>
       <div class="practice-controls" aria-label="Choose typing practice">
         <label class="lesson-picker">Level
           <select id="practiceLevel" aria-label="Choose practice level">
@@ -1060,7 +1074,7 @@ Taylor</textarea><small>Enter one student per line.</small></label>
   <div class="toast" id="toast" role="status" aria-live="polite">Copied to clipboard</div>
   <script src="typing-layouts.js?v=20261023-1"></script>
   <script src="app.js?v=20261023-typing-placeholder-1"></script>
-  <script src="practice.js?v=20261023-guided-tutor-1"></script>
+  <script src="practice.js?v=20261024-kawthoolei-course-1"></script>
   <script src="games.js?v=20260915-unified-keyboard-1"></script>
   <script src="custom-games.js?v=20260915-unified-keyboard-1"></script>
   <script src="race.js?v=20260915-unified-keyboard-1"></script>
