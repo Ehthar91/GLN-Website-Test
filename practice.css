@@ -352,3 +352,24 @@ body.theme-rgb #practiceView .practice-course-picker,body.theme-rgb #practiceVie
 body.theme-rgb #practiceView .practice-course-picker select{color:#e9f7ff;background:#142940;border-color:#3d5d79}
 body.theme-rgb #practiceView .practice-course-notice{background:rgba(25,67,88,.64);color:#c4def0;border-left-color:#39dbed}
 @media(max-width:650px){.practice-course-row{align-items:stretch}.practice-course-picker{flex:1 1 100%;align-items:stretch;flex-direction:column}.practice-course-status{flex:1 1 100%}}
+
+/* Optional original-exercise builder (Practice page only). */
+.practice-pack-builder[hidden]{display:none!important}
+.practice-pack-builder{border:1px solid #c4d9eb;background:#f6fbff;border-radius:16px;padding:18px;margin:12px 0 15px;color:#233d57;box-shadow:0 8px 25px rgba(26,66,105,.06)}
+.practice-pack-builder-title{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:15px}
+.practice-pack-builder h2{font-size:1.12rem;margin:0 0 5px}.practice-pack-builder p{font-size:.8rem;margin:0;line-height:1.6;color:#526d86}
+.practice-builder-fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:13px}
+.practice-builder-fields label,.practice-builder-text-label{display:grid;gap:6px;font-size:.78rem;font-weight:750}
+.practice-builder-fields input,.practice-builder-fields select,.practice-pack-builder textarea{min-width:0;width:100%;box-sizing:border-box;border:1px solid #c5d7e7;border-radius:10px;background:white;color:#173650;padding:11px 12px;font:inherit}
+.practice-pack-builder textarea{resize:vertical;line-height:1.6;font-size:.98rem;min-height:95px}
+.practice-builder-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:13px 0}
+#practiceBuilderStatus{flex:1 1 240px;font-size:.78rem;color:#245e7b}
+.practice-pack-builder .practice-builder-note{background:#e6f1f9;border-radius:9px;padding:11px;font-size:.75rem}
+.practice-builder-collection{margin-top:13px;font-size:.78rem}.practice-builder-collection ol{margin:7px 0 0;padding-left:23px;max-height:165px;overflow:auto;line-height:1.9}
+body.theme-rgb .practice-pack-builder{background:#10253b;border-color:#3b5c78;color:#e7f4ff}
+body.theme-rgb .practice-pack-builder p,body.theme-rgb .practice-builder-collection{color:#a9c6df}
+body.theme-rgb .practice-builder-fields input,body.theme-rgb .practice-builder-fields select,body.theme-rgb .practice-pack-builder textarea{background:#071b30;color:#e7f4ff;border-color:#385e79}
+body.theme-rgb .practice-pack-builder .practice-builder-note{background:#193951;color:#bcd5e8}
+body.theme-rgb #practiceBuilderStatus{color:#8fe5e9}
+@media(max-width:900px){.practice-builder-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:550px){.practice-builder-fields{grid-template-columns:1fr}.practice-pack-builder-title{flex-direction:column}}

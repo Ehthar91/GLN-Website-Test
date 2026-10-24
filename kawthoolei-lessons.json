@@ -1,0 +1,21 @@
+{
+  "name": "Kawthoolei typing tutor — verified opening exercise only",
+  "source": "https://www.kawthooleiunicode.org/typing-tutors",
+  "note": "Partial course. Add only the exact exercise text verified and permitted for reuse.",
+  "lessons": {
+    "en": [
+      {
+        "level": "English guide",
+        "title": "English guide",
+        "exercises": [
+          {
+            "title": "Exercise 1",
+            "text": "a s d f a s d f a s d f a s d f"
+          }
+        ]
+      }
+    ],
+    "ksw": [],
+    "pwo": []
+  }
+}

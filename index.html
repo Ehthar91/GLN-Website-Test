@@ -991,11 +991,26 @@ Taylor</textarea><small>Enter one student per line.</small></label>
             <option value="kawthoolei">Kawthoolei original exercises (available only)</option>
           </select>
         </label>
-        <button class="button ghost" id="practicePackUpload" type="button">Import original lesson pack (.json)</button>
+        <button class="button ghost" id="practicePackBuilderToggle" type="button" aria-expanded="false" aria-controls="practicePackBuilder">+ Add original exercises</button>
+        <button class="button ghost" id="practicePackUpload" type="button">Import lesson pack (.json)</button>
         <input id="practicePackFile" type="file" accept=".json,application/json" hidden />
         <button class="button ghost" id="practicePackReset" type="button" hidden>Remove imported lessons</button>
         <span class="practice-course-status" id="practicePackStatus" role="status">Original lesson pack: not installed</span>
       </div>
+      <section class="practice-pack-builder" id="practicePackBuilder" aria-label="Build original exercise lesson pack" hidden>
+        <div class="practice-pack-builder-title"><div><h2>Add an original exercise</h2><p>Paste the exact exercise text from a source you are permitted to reuse. GLN will keep the spelling, spacing, and order exactly as entered.</p></div><button id="practiceBuilderClose" class="button ghost" type="button">Close</button></div>
+        <div class="practice-builder-fields">
+          <label>Language<select id="practiceBuilderLanguage"><option value="en">English</option><option value="ksw">Sgaw Karen</option><option value="pwo">Pwo Karen</option></select></label>
+          <label>Level / section<input id="practiceBuilderLevel" type="text" maxlength="90" value="Beginner" placeholder="e.g. English guide" /></label>
+          <label>Lesson<input id="practiceBuilderLesson" type="text" maxlength="120" value="Lesson 1" placeholder="Original lesson name" /></label>
+          <label>Exercise name<input id="practiceBuilderExercise" type="text" maxlength="120" value="Exercise 2" placeholder="Exercise number or name" /></label>
+        </div>
+        <label class="practice-builder-text-label" for="practiceBuilderText">Exact practice text</label>
+        <textarea id="practiceBuilderText" rows="4" maxlength="15000" spellcheck="false" placeholder="Paste the original practice text here (keep its spaces and punctuation)"></textarea>
+        <div class="practice-builder-actions"><button class="button primary" id="practiceBuilderAdd" type="button">Save exercise</button><button class="button ghost" id="practiceBuilderExport" type="button">Download lesson pack (.json)</button><span id="practiceBuilderStatus" role="status"></span></div>
+        <p class="practice-builder-note">To make your lesson pack available to every student, download it and upload it to your GitHub repository root as <code>kawthoolei-lessons.json</code>. The site will load it automatically. Keep the source attribution and confirm reuse permission for the lesson content.</p>
+        <div class="practice-builder-collection"><strong>Exercises in your current pack</strong><ol id="practiceBuilderList"></ol></div>
+      </section>
       <p id="practiceCourseNotice" class="practice-course-notice" aria-live="polite"></p>
       <p id="practiceSourceCredit" class="practice-source-credit" hidden>Original exercise source: © 2024 Kawthoolei Unicode · Typing Tutors software MIT license · <a href="https://www.kawthooleiunicode.org/copyrights" target="_blank" rel="noopener noreferrer">License and attribution</a>.</p>
       <div class="practice-controls" aria-label="Choose typing practice">
@@ -1074,7 +1089,7 @@ Taylor</textarea><small>Enter one student per line.</small></label>
   <div class="toast" id="toast" role="status" aria-live="polite">Copied to clipboard</div>
   <script src="typing-layouts.js?v=20261023-1"></script>
   <script src="app.js?v=20261023-typing-placeholder-1"></script>
-  <script src="practice.js?v=20261024-kawthoolei-course-1"></script>
+  <script src="practice.js?v=20261024-kawthoolei-builder-2"></script>
   <script src="games.js?v=20260915-unified-keyboard-1"></script>
   <script src="custom-games.js?v=20260915-unified-keyboard-1"></script>
   <script src="race.js?v=20260915-unified-keyboard-1"></script>

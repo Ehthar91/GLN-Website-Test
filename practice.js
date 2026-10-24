@@ -37,8 +37,18 @@ const packFile=document.querySelector('#practicePackFile');
 const packReset=document.querySelector('#practicePackReset');
 const packStatus=document.querySelector('#practicePackStatus');
 const courseNotice=document.querySelector('#practiceCourseNotice');
+const builderToggle=document.querySelector('#practicePackBuilderToggle');
+const builderPanel=document.querySelector('#practicePackBuilder');
+const builderStatus=document.querySelector('#practiceBuilderStatus');
+const builderList=document.querySelector('#practiceBuilderList');
+const builderLanguage=document.querySelector('#practiceBuilderLanguage');
+const builderLevel=document.querySelector('#practiceBuilderLevel');
+const builderLesson=document.querySelector('#practiceBuilderLesson');
+const builderExercise=document.querySelector('#practiceBuilderExercise');
+const builderText=document.querySelector('#practiceBuilderText');
 let selectedCourse=localStorage.getItem('glnPracticeCourse')==='kawthoolei'?'kawthoolei':'gln';
 let importedKawthoolei={en:[],ksw:[],pwo:[]};
+let publishedKawthoolei={en:[],ksw:[],pwo:[]};
 function validLessonPack(parsed){
   const source=parsed?.lessons||parsed?.courses||parsed;
   if(!source||typeof source!=='object'||Array.isArray(source))throw Error('Expected an object with lessons.en, lessons.ksw, or lessons.pwo arrays.');
@@ -62,11 +72,10 @@ function validLessonPack(parsed){
   if(!count)throw Error('No exercises were found.');
   return {lessons:clean,count};
 }
-function combinedOfficialGroups(){return {
-  en:importedKawthoolei.en.length?importedKawthoolei.en:kawthooleiVerified.en,
-  ksw:importedKawthoolei.ksw.length?importedKawthoolei.ksw:kawthooleiVerified.ksw,
-  pwo:importedKawthoolei.pwo.length?importedKawthoolei.pwo:kawthooleiVerified.pwo
-}}
+function combinedOfficialGroups(){const result={};for(const lang of ['en','ksw','pwo']){
+  result[lang]=importedKawthoolei[lang].length?importedKawthoolei[lang]:
+    publishedKawthoolei[lang].length?publishedKawthoolei[lang]:kawthooleiVerified[lang];
+}return result}
 function officialLessonsForLanguage(lang){const groups=combinedOfficialGroups()[lang]||[];
   return groups.flatMap(group=>group.exercises.map(ex=>({title:`${group.title} · ${ex.title}`,focus:ex.title,level:group.level,text:ex.text,exact:true})))
 }
@@ -75,12 +84,12 @@ function officialMode(){return selectedCourse==='kawthoolei'&&availableOfficial(
 function lessonsForLanguage(){if(officialMode())return officialLessonsForLanguage(typingLanguage);return typingLanguage==='en'?englishLessons:typingLanguage==='pwo'?pwoLessons:karenLessons}
 function courseStatus(){coursePicker.value=selectedCourse;
   const count=officialLessonsForLanguage(typingLanguage).length;
-  const source=importedKawthoolei[typingLanguage].length?'an imported lesson pack':typingLanguage==='en'?'the verified opening English drill':'';
+  const source=importedKawthoolei[typingLanguage].length?'your local lesson pack':publishedKawthoolei[typingLanguage].length?'the published website lesson pack':typingLanguage==='en'?'the verified opening English drill':'';
   document.querySelector('#practiceSourceCredit').hidden=!officialMode();
   if(officialMode())courseNotice.textContent=`Kawthoolei: ${count} available exercise${count===1?'':'s'} from ${source}. This is not the complete official course. The GLN keyboard layout stays unchanged.`;
   else courseNotice.textContent=typingLanguage==='en'?'GLN lessons remain available. Switch to Kawthoolei for its verified opening English exercise.':'The exact Kawthoolei lessons for this language are not available yet. GLN lessons are still available; import an authorized original lesson pack to add them.';
   const any=Object.values(importedKawthoolei).some(x=>x.length);packReset.hidden=!any;
-  if(!any)packStatus.textContent='Original lesson pack: not installed';
+  if(!any)packStatus.textContent=Object.values(publishedKawthoolei).some(x=>x.length)?'Published lesson pack loaded for students':'Personal lesson pack: not installed';
 }
 try{const saved=localStorage.getItem('glnKawthooleiLessonPack');if(saved)importedKawthoolei=validLessonPack(JSON.parse(saved)).lessons}catch(_){importedKawthoolei={en:[],ksw:[],pwo:[]}}
 if(selectedCourse==='kawthoolei'&&!availableOfficial())selectedCourse='gln';
@@ -262,4 +271,75 @@ packReset.onclick=()=>{
   lessons=lessonsForLanguage();lessonIndex=0;levelIndex=0;exerciseIndex=officialMode()?0:1;resetLesson();
   packStatus.textContent='Imported course cleared. Verified opening English exercise remains available.';
 };
+
+// Teachers can collect exact, licensed exercises in the browser and publish a
+// self-contained lesson pack. Only the verified starter drill is preloaded.
+function cloneCourseGroups(){return JSON.parse(JSON.stringify(combinedOfficialGroups()))}
+function persistPersonalCourse(groups){
+  const checked=validLessonPack({lessons:groups});
+  importedKawthoolei=checked.lessons;
+  try{localStorage.setItem('glnKawthooleiLessonPack',JSON.stringify({lessons:checked.lessons}));}
+  catch(_){builderStatus.textContent='Saved for this session; browser storage is full. Download your lesson pack to avoid losing it.';}
+  return checked;
+}
+function refreshPracticeCourse(){
+  if(selectedCourse==='kawthoolei'&&!availableOfficial())selectedCourse='gln';
+  lessons=lessonsForLanguage();lessonIndex=0;levelIndex=0;exerciseIndex=officialMode()?0:1;
+  localStorage.setItem('glnPracticeCourse',selectedCourse);resetLesson();
+}
+function renderBuilderList(){
+  const groups=combinedOfficialGroups();builderList.replaceChildren();let total=0;
+  for(const lang of ['en','ksw','pwo'])for(const group of groups[lang])for(const ex of group.exercises){
+    total++;const li=document.createElement('li');
+    const label=document.createElement('span');label.textContent=`${{en:'English',ksw:'Sgaw Karen',pwo:'Pwo Karen'}[lang]} · ${group.level} · ${group.title} · ${ex.title}`;
+    li.append(label);builderList.append(li);
+  }
+  if(!total){const li=document.createElement('li');li.textContent='No lessons added yet.';builderList.append(li)}
+}
+function toggleBuilder(show){builderPanel.hidden=!show;builderToggle.setAttribute('aria-expanded',String(show));if(show){builderLanguage.value=typingLanguage;renderBuilderList();builderText.focus({preventScroll:true})}}
+builderToggle.onclick=()=>toggleBuilder(builderPanel.hidden);
+document.querySelector('#practiceBuilderClose').onclick=()=>toggleBuilder(false);
+document.querySelector('#practiceBuilderAdd').onclick=()=>{
+  try{
+    const lang=builderLanguage.value,level=builderLevel.value.trim(),title=builderLesson.value.trim(),name=builderExercise.value.trim(),text=builderText.value;
+    if(!['en','ksw','pwo'].includes(lang)||!level||!title||!name||!text.trim())throw Error('Fill in the language, level, lesson, exercise name, and exact text.');
+    const groups=cloneCourseGroups();
+    let group=groups[lang].find(g=>g.level===level&&g.title===title);
+    if(!group){group={level,title,exercises:[]};groups[lang].push(group)}
+    if(group.exercises.some(x=>x.title===name))throw Error('This lesson already has an exercise with that name. Use the original next exercise number.');
+    group.exercises.push({title:name,text});
+    persistPersonalCourse(groups);
+    selectedCourse='kawthoolei';refreshPracticeCourse();
+    builderStatus.textContent=`Saved ${name}. ${groups[lang].reduce((n,g)=>n+g.exercises.length,0)} ${lang.toUpperCase()} exercises in this pack.`;
+    builderText.value='';
+    const match=name.match(/^(.*?)(\d+)$/);
+    if(match)builderExercise.value=match[1]+String(Number(match[2])+1);
+    renderBuilderList();
+  }catch(err){builderStatus.textContent=`Couldn't save: ${err.message}`}
+};
+document.querySelector('#practiceBuilderExport').onclick=()=>{
+  try{
+    const pack=validLessonPack({lessons:cloneCourseGroups()});
+    const payload={name:'GLN Kawthoolei lesson collection',source:'https://www.kawthooleiunicode.org/typing-tutors',note:'Exercise content requires its own reuse permission; preserves exact supplied text.',lessons:pack.lessons};
+    const blob=new Blob([JSON.stringify(payload,null,2)+'\n'],{type:'application/json;charset=utf-8'}),url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download='kawthoolei-lessons.json';document.body.appendChild(a);a.click();a.remove();
+    window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+    builderStatus.textContent=`Downloaded ${pack.count} exercises. Upload kawthoolei-lessons.json to the GitHub repository root to publish them for students.`;
+  }catch(err){builderStatus.textContent=`Export failed: ${err.message}`}
+};
+// The optional file is for whole-class deployment on static GitHub Pages.
+// Importing locally takes precedence, and a missing file is entirely normal.
+async function loadPublishedPracticeLessons(){
+  try{
+    if(location.protocol==='file:')return;
+    const response=await fetch('kawthoolei-lessons.json',{cache:'no-store'});
+    if(!response.ok)return;
+    const file=await response.json(),checked=validLessonPack(file);
+    publishedKawthoolei=checked.lessons;
+    if(selectedCourse==='kawthoolei'&&!Object.values(importedKawthoolei).some(groups=>groups.length))refreshPracticeCourse();
+    else courseStatus();
+    if(!builderPanel.hidden)renderBuilderList();
+  }catch(_){/* Keep the verified starter and original GLN lessons. */}
+}
 renderLesson();
+loadPublishedPracticeLessons();
