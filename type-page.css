@@ -75,3 +75,18 @@ body.theme-rgb .legacy-font-summary-icon{background:linear-gradient(135deg,#143e
 body.theme-rgb .cfcr-live-panel{background:#112238}body.theme-rgb .cfcr-safety-label{color:#9bf2dd;border-color:#2c625a}
 @media(max-width:540px){.cfcr-local-controls{padding:11px}.cfcr-live-panel{padding:11px}.cfcr-live-surface{font-size:1.8rem;padding:12px}}
 @media print{.cfcr-local-controls,.cfcr-live-panel{display:none!important}}
+
+/* Simpler local-font setup: one-time selection, locally remembered. */
+.cfcr-file-control input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.cfcr-file-control input[type=file]:focus-visible + small{outline:2px solid #23b5e1}
+.cfcr-status-group{display:flex;flex:1 1 230px;align-items:center;gap:10px;flex-wrap:wrap}
+.cfcr-forget-btn{background:transparent;border:1px solid var(--border);border-radius:9px;color:var(--muted);font-size:.7rem;padding:7px 10px}
+.cfcr-local-controls:not(.cfcr-is-ready) .cfcr-forget-btn{display:none}
+.cfcr-local-controls.cfcr-is-ready .cfcr-file-control small{display:none}
+.cfcr-local-controls.cfcr-is-ready .cfcr-local-label{background:#e2f4f0;color:#166b60}
+.cfcr-local-controls.cfcr-is-ready .cfcr-local-label span{display:none}
+.cfcr-local-controls.cfcr-is-ready .cfcr-local-label{font-size:.72rem;padding:9px 12px}
+.cfcr-local-controls.cfcr-is-ready .cfcr-local-label::before{content:'✓  Change';}
+.cfcr-local-controls.cfcr-is-ready .cfcr-local-label{font-size:0}
+.cfcr-local-controls.cfcr-is-ready .cfcr-local-label::before{font-size:.73rem}
+.cfcr-live-surface{min-height:145px}

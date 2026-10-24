@@ -20,7 +20,8 @@
   const selection = $('legacyFontSelection');
   const selectionName = $('legacyFontSelectedName');
   const selectionSample = $('legacyFontSelectedPreview');
-  let selectedId = '';
+  const getSelection = () => { try { return localStorage.getItem('glnSawCfcrSelectedV2') || '000'; } catch { return '000'; } };
+  let selectedId = fontNumbers.includes(getSelection()) ? getSelection() : '000';
   let visibleCount = 12;
   let onlyFavorites = false;
 
@@ -35,12 +36,18 @@
   });
   function choose(style) {
     selectedId = style.id;
+    try { localStorage.setItem('glnSawCfcrSelectedV2',selectedId); } catch {}
     selection.hidden = false;
     selectionName.textContent = style.label;
     setSprite(selectionSample, style.index);
     selectionSample.setAttribute('aria-label', `${style.label} original legacy font sample`);
     document.dispatchEvent(new CustomEvent('gln:cfcr-style-chosen',{detail:{id:style.id}}));
     updateCards();
+    const live = document.getElementById('cfcrLivePreview');
+    if (live && window.matchMedia && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      // Show the changed text instead of leaving the user at the bottom of a long gallery.
+      live.scrollIntoView({behavior:'smooth',block:'center'});
+    }
   }
   function updateCards() {
     grid.querySelectorAll('[data-style]').forEach(card => {
@@ -106,6 +113,9 @@
     visibleCount = 12; render();
   });
   more.addEventListener('click', () => { visibleCount += 18; render(); });
+  selection.hidden = false;
+  selectionName.textContent = 'Saw cfcr'+selectedId;
+  setSprite(selectionSample,styles.find(s=>s.id===selectedId).index);
   render();
 })();
 
@@ -123,6 +133,8 @@
   const detail = $('cfcrPreviewStatus');
   const pickedName = $('cfcrActiveStyle');
   const pasteHint = $('cfcrFallbackHint');
+  const forget = $('cfcrForgetFonts');
+  const loadControls = $('cfcrLoadControls');
   if (!editor || !preview || !upload) return;
 
   // Historic Sgaw Karen keyboard encoding. Map only symbols supported by the
@@ -141,33 +153,72 @@
   ];
   for (let digit=0;digit<=9;digit++) pairs.push([0x1040+digit,String(digit)]);
   const legacyMap = new Map(pairs.map(([code, value]) => [String.fromCodePoint(code),value]));
-  const myanmarCluster = /[\u1000-\u109f\uAA60-\uAA7F]+|[^\u1000-\u109f\uAA60-\uAA7F]+/gu;
+  const isMyanmar = ch => /[\u1000-\u109f\uAA60-\uAA7f]/u.test(ch);
+  // A Myanmar syllable is kept together. Missing Karen-specific marks never
+  // prevent the *rest* of the sentence from using a legacy style.
+  const isMyanmarBase = ch => /[\u1000-\u102a\u103f-\u1057\u1060-\u1061\uAA60-\uAA7f]/u.test(ch);
   const localFiles = new Map();
   const loadedFonts = new Map();
-  let currentStyle = '000';
+  let currentStyle = (()=>{try{return localStorage.getItem('glnSawCfcrSelectedV2') || '000'}catch{return '000'}})();
+  if(!/^\d{3}$/.test(currentStyle)) currentStyle='000';
   let currentFont = null;
   let archive = null;
   let actionVersion = 0;
+  let userPickedFiles = false;
 
-  // Testable pure converter. Unknown Myanmar sequences remain unchanged.
+  // Count real syllables, not whole words. Unknown syllables remain Padauk.
   function convertUnicode(source) {
-    let mapped = 0, total = 0, fallbacks = 0;
+    let converted = 0, total = 0, fallback = 0;
     const runs = [];
-    for (const chunk of source.match(myanmarCluster) || []) {
-      const isMyanmar = /[\u1000-\u109f\uAA60-\uAA7F]/u.test(chunk);
-      if (!isMyanmar) { runs.push({text:chunk, legacy:false, missing:false}); continue; }
-      const chars = [...chunk];
-      total += chars.length;
-      const complete = chars.every(char => legacyMap.has(char));
-      if (complete) {
-        mapped += chars.length;
-        runs.push({text:chars.map(c=>legacyMap.get(c)).join(''), legacy:true, missing:false});
-      } else {
-        fallbacks += chars.length;
-        runs.push({text:chunk, legacy:false, missing:true});
-      }
+    const add = (text,legacy,missing=false)=>{
+      if(!text)return;
+      const last=runs[runs.length-1];
+      if(last && last.legacy===legacy && last.missing===missing)last.text+=text;
+      else runs.push({text,legacy,missing});
+    };
+    let pending='';
+    const flush=()=>{
+      if(!pending)return;
+      total++;
+      const chars=[...pending];
+      if(chars.every(char=>legacyMap.has(char))) {
+        converted++;
+        add(chars.map(ch=>legacyMap.get(ch)).join(''),true);
+      } else {fallback++;add(pending,false,true);}
+      pending='';
+    };
+    for(const ch of source){
+      if(!isMyanmar(ch)) {flush();add(ch,false);continue;}
+      if(isMyanmarBase(ch) && pending)flush();
+      pending+=ch;
     }
-    return {runs, mapped, total, fallbacks};
+    flush();
+    return {runs,converted,total,fallback,mapped:converted,fallbacks:fallback};
+  }
+
+  // User-provided ZIP/TTFs are cached locally in IndexedDB; never uploaded.
+  const DB_NAME='glnSawCfcrLocalFontsV1';
+  function openStore(){
+    return new Promise((resolve,reject)=>{
+      if(!('indexedDB' in window))return reject(new Error('Local storage unavailable'));
+      const req=indexedDB.open(DB_NAME,1);
+      req.onupgradeneeded=()=>req.result.createObjectStore('fonts');
+      req.onerror=()=>reject(req.error);
+      req.onsuccess=()=>resolve(req.result);
+    });
+  }
+  async function savedFonts(action,files){
+    const db=await openStore();
+    return new Promise((resolve,reject)=>{
+      const tx=db.transaction('fonts',action==='read'?'readonly':'readwrite');
+      const store=tx.objectStore('fonts');
+      const req=action==='read'?store.get('userCollection'):
+        action==='write'?store.put(files,'userCollection'):store.delete('userCollection');
+      req.onsuccess=()=>resolve(req.result);
+      req.onerror=()=>reject(req.error);
+      tx.oncomplete=()=>db.close();
+      tx.onerror=()=>db.close();
+    });
   }
   // Exposed for local QA; never used to alter the editor or the clipboard.
   window.GLN_CFCR_EXPERIMENT = { convertUnicode, mappedCodepoints: pairs.map(([cp])=>cp) };
@@ -182,8 +233,8 @@
       span.textContent = editor.value || (selectedLang === 'en' ? 'Type here to preview your text' : 'Type Pwo Karen here…');
       preview.append(span);
       preview.classList.remove('cfcr-preview-enabled');
-      detail.textContent = 'Saw Cfcr is a Sgaw Karen legacy-font collection; conversion is disabled for Pwo Karen and English.';
-      pasteHint.textContent = 'The original Unicode or English editor text remains unchanged.';
+      detail.textContent = 'These designs are for Sgaw Karen. Switch to Sgaw Karen to preview a style.';
+      pasteHint.textContent = 'Copy and TXT download always preserve your original text.';
       return;
     }
     if (!currentFont) {
@@ -191,8 +242,8 @@
       span.textContent = source;
       preview.append(span);
       preview.classList.remove('cfcr-preview-enabled');
-      detail.textContent = 'Unicode reference shown. Load your own Saw Cfcr ZIP or TTFs to enable the experimental legacy design.';
-      pasteHint.textContent = 'Your original Unicode text remains in the editor. No font file is uploaded.';
+      detail.textContent = 'To try this design with your text, select your Saw Cfcr ZIP once above.';
+      pasteHint.textContent = 'Your Unicode typing and copy functions are unchanged. The fonts stay on this device.';
       return;
     }
     preview.classList.add('cfcr-preview-enabled');
@@ -204,11 +255,11 @@
       if (run.missing) { span.className = 'cfcr-unmapped'; span.title='Unicode fallback: conversion not verified for this text'; }
       preview.append(span);
     }
-    const percent = result.total ? Math.round(result.mapped/result.total*100) : 100;
-    detail.textContent = `${percent}% of Myanmar characters mapped to experimental legacy codes`+
-      (result.fallbacks ? ' · Unmapped words display in Padauk' : '')+
-      (editor.value.length>8000 ? ' · Preview limited to first 8,000 characters' : '');
-    pasteHint.textContent = 'Visual experiment only: older Saw Cfcr fonts may have misplaced vowel and tone marks. Unicode copy/download is unchanged.';
+    detail.textContent = result.fallback
+      ? 'Some syllables remain in the standard Unicode font because their legacy equivalents are not verified.'
+      : 'This preview uses the selected vintage font. Check the appearance of vowel and tone marks.';
+    if(editor.value.length>8000)detail.textContent += ' Preview shows the first 8,000 characters.';
+    pasteHint.textContent = 'Preview only — Copy and Download TXT still use correct Unicode text. Verify this vintage design before printing.';
   }
 
   function parseZip(file) {
@@ -271,49 +322,76 @@
   async function activate(style) {
     currentStyle=style;
     const version=++actionVersion;
-    status.textContent=`Looking for Saw cfcr${style} on this device…`;
+    status.textContent=`Opening Saw cfcr${style}…`;
     try {
       const font=await loadFont(style);
       if(version!==actionVersion)return;
       currentFont=font;
-      status.textContent=font?`Using Saw cfcr${style} from your local files · not uploaded`:
-        `Saw cfcr${style} not loaded · choose the original ZIP or matching TTF files`;
+      status.textContent=font?`Ready: Saw cfcr${style} · fonts stay on this device`:
+        'Choose your Saw Cfcr ZIP once to enable styled previews';
+      if(loadControls)loadControls.classList.toggle('cfcr-is-ready',Boolean(font));
     } catch(err) {
       if(version!==actionVersion)return;
       currentFont=null;
-      status.textContent=`Unable to load font: ${err.message}`;
+      status.textContent=`Could not open this style: ${err.message}`;
+      if(loadControls)loadControls.classList.remove('cfcr-is-ready');
     }
     update();
   }
-  async function loadSelectedFiles(event) {
-    const files=[...event.target.files];
+  async function setFiles(files,{save=false}={}) {
     if(!files.length)return;
-    const version=++actionVersion;
-    status.textContent='Reading local font files…';
+    ++actionVersion;
+    status.textContent='Preparing your font collection…';
     try {
-      archive=null;localFiles.clear();loadedFonts.clear();
+      archive=null;localFiles.clear();loadedFonts.clear();currentFont=null;
       for(const file of files){
         if(/\.zip$/i.test(file.name)){
           if(file.size>40_000_000)throw new Error('ZIP is too large.');
           archive=await parseZip(file);
-          for (const [id,entry] of archive.entries) localFiles.set(id,{kind:'zip',entry});
-        } else {
+          for(const [id,entry] of archive.entries)localFiles.set(id,{kind:'zip',entry});
+        }else{
           const m=file.name.match(/Saw\s*cfcr(\d{3})\.ttf$/i);
-          if(m && file.size<=4_000_000) localFiles.set(m[1],{kind:'file',file});
+          if(m && file.size<=4_000_000)localFiles.set(m[1],{kind:'file',file});
         }
       }
-      if(!localFiles.size)throw new Error('Choose the original Saw Cfcr ZIP or Saw cfcr### TTF files.');
-      status.textContent=`${localFiles.size} styles available locally. Loading selection…`;
-      // Font loading is per style; no 90-font memory or network transfer.
+      if(!localFiles.size)throw new Error('No Saw Cfcr fonts found in this file.');
+      if(save){
+        try{await savedFonts('write',files);}catch(e){
+          // The current session still works even if storage is disabled.
+          console.info('Browser could not remember local fonts:',e.message);
+        }
+      }
       await activate(currentStyle);
-    } catch(err) {
-      if(version>actionVersion) return;
+    }catch(err){
       archive=null;localFiles.clear();currentFont=null;
-      status.textContent=`Cannot use the selected files: ${err.message}`;
+      status.textContent=`Could not open fonts: ${err.message}`;
+      loadControls?.classList.remove('cfcr-is-ready');
       update();
     }
   }
-  upload.addEventListener('change',loadSelectedFiles);
+  upload.addEventListener('change',async event=>{
+    const files=[...event.target.files];
+    if(!files.length)return;
+    userPickedFiles=true;
+    await setFiles(files,{save:true});
+  });
+  forget?.addEventListener('click',async()=>{
+    userPickedFiles=true;
+    try{await savedFonts('remove');}catch{}
+    archive=null;localFiles.clear();currentFont=null;loadedFonts.clear();
+    upload.value='';
+    status.textContent='Local fonts cleared. Choose the ZIP again to preview a design.';
+    loadControls?.classList.remove('cfcr-is-ready');
+    update();
+  });
+  // Restore previously selected font ZIP directly from the user's browser.
+  savedFonts('read').then(async files=>{
+    if(files && Array.isArray(files) && files.length && !userPickedFiles){
+      await setFiles(files);
+    } else if(!userPickedFiles){
+      status.textContent='Choose your Saw Cfcr ZIP once to get started';
+    }
+  }).catch(()=>{ if(!userPickedFiles)status.textContent='Choose your Saw Cfcr ZIP once to get started'; });
   editor.addEventListener('input',update);
   $('languageSelector')?.addEventListener('click',()=>queueMicrotask(update));
   $('clearBtn')?.addEventListener('click',()=>queueMicrotask(update));
@@ -321,5 +399,5 @@
   document.addEventListener('gln:cfcr-style-chosen',ev=>{
     if(typeof ev.detail?.id==='string' && /^\d{3}$/.test(ev.detail.id))activate(ev.detail.id);
   });
-  activate(currentStyle);
+  update();
 })();
