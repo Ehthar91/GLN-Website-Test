@@ -1,0 +1,147 @@
+/* GLN Tug of War: smooth, responsive arena. Scoped to Tug of War only. */
+.tug-teacher-arena{
+  grid-template-columns:minmax(100px,136px) minmax(0,1fr) minmax(100px,136px);
+  align-items:center;gap:16px;min-height:315px;
+}
+.tug-arena-score{position:relative;z-index:3;align-self:center}
+.tug-arena-score strong{font-variant-numeric:tabular-nums;line-height:1.2}
+.tug-rope-wrap{top:auto!important;align-self:stretch;min-width:0;min-height:255px;position:relative;padding:0!important}
+.tug-rope-wrap>.tug-rope-line{
+  position:absolute;left:0;right:0;bottom:44px;top:auto;
+  margin:0!important;
+}
+.tug-rope-wrap>.tug-live-avatars{
+  position:absolute;top:auto!important;left:0;right:0;bottom:68px;
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:12px;min-height:0!important;align-items:end;pointer-events:auto;
+}
+.tug-live-avatars>span{
+  display:flex;flex-wrap:nowrap;align-items:end;justify-content:flex-start;
+  gap:3px;max-width:none;min-width:0;min-height:104px!important;
+  padding:4px!important;overflow-x:auto;overflow-y:hidden;
+  scrollbar-width:thin;scrollbar-color:#a2bbce transparent;
+}
+.tug-live-avatars>span:last-child{justify-content:flex-start}
+.tug-live-avatars .tug-character{
+  min-width:66px!important;max-width:78px!important;
+  flex:0 0 70px;gap:3px;
+}
+.tug-live-avatars .tug-character-stage{min-height:92px!important}
+.tug-live-avatars .tug-avatar-art{max-height:91px!important;max-width:74px}
+.tug-character-name,.tug-character-meta{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tug-rope-knot{transition:left .68s cubic-bezier(.18,.74,.23,1);will-change:left}
+.tug-score-card{transition:background-color .2s ease,box-shadow .2s ease;border-radius:10px}
+.tug-score-card.finished{opacity:.78}
+.tug-score-metrics b{font-variant-numeric:tabular-nums}
+/* Student view: put a stable rope between the teams, not on top of their heads. */
+#tugWorld{
+  min-height:300px;padding:22px 20px!important;
+  align-items:center!important;gap:12px!important;
+  grid-template-columns:minmax(115px,1fr) minmax(190px,2fr) minmax(115px,1fr)!important;
+}
+#tugWorld .tug-player-rope{
+  position:relative;top:auto!important;bottom:auto!important;
+  min-width:0;align-self:center;padding:22px 0 0!important;
+}
+#tugWorld .tug-player-rope>.tug-rope-line{margin:14px 0 34px}
+#tugWorld .tug-player-rope p{
+  position:relative;top:auto!important;bottom:auto!important;
+  margin:0 auto!important;max-width:100%;line-height:1.4;
+  white-space:normal;text-align:center;
+}
+#tugWorld .tug-player-team{min-width:0}
+#tugWorld .tug-player-team>div{min-height:145px;max-height:210px;overflow:auto;align-content:end;justify-content:center}
+#tugWorld .tug-player-team .tug-character{
+  min-width:67px!important;max-width:88px!important;
+  flex:0 1 82px;
+}
+#tugWorld .tug-player-team .tug-character-stage{min-height:96px!important}
+#tugWorld .tug-player-team .tug-avatar-art{max-height:100px!important}
+body.theme-rgb .tug-live-avatars>span{scrollbar-color:#46627f transparent}
+body.theme-rgb .tug-score-card:hover{background:rgba(103,181,255,.055)}
+@media(max-width:960px){
+ .tug-teacher-arena{grid-template-columns:minmax(82px,98px) minmax(0,1fr) minmax(82px,98px);gap:8px;padding:12px}
+ .tug-arena-score{padding:9px 5px}
+ .tug-arena-score strong{font-size:1.45rem}
+ .tug-rope-wrap{min-height:225px}
+ .tug-rope-wrap>.tug-live-avatars{bottom:62px}
+ #tugWorld{grid-template-columns:minmax(0,1fr) minmax(160px,1.5fr) minmax(0,1fr)!important;padding:15px!important}
+}
+@media(max-width:620px){
+ .tug-teacher-arena{display:grid;grid-template-columns:1fr 1fr;min-height:0;gap:8px}
+ .tug-arena-score{grid-row:1}
+ .tug-rope-wrap{grid-row:2;grid-column:1/-1;min-height:206px}
+ .tug-rope-wrap>.tug-live-avatars{bottom:60px}
+ #tugWorld{
+   grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;
+   gap:10px!important;min-height:0;padding:14px!important;
+ }
+ #tugWorld .tug-player-team.red{grid-column:1;grid-row:1}
+ #tugWorld .tug-player-team.blue{grid-column:2;grid-row:1}
+ #tugWorld .tug-player-rope{grid-column:1/-1;grid-row:2;padding:0!important}
+ #tugWorld .tug-player-team>div{max-height:160px;min-height:122px}
+ #tugWorld .tug-player-team .tug-character{min-width:56px!important;max-width:70px!important;flex-basis:68px}
+ #tugWorld .tug-player-team .tug-avatar-art{max-height:85px!important}
+ .tug-scoreboard{grid-template-columns:1fr}
+}
+@media(prefers-reduced-motion:reduce){
+ .tug-rope-knot,.tug-score-card{transition:none!important}
+ .tug-character .tug-avatar-art{animation:none!important}
+ .tug-character-pop{animation:none!important}
+}
+/* Reset obsolete absolute-position rules from earlier game versions. */
+.tug-teacher-arena{display:grid!important}
+.tug-teacher-arena>.tug-arena-score{
+  position:relative!important;left:auto!important;right:auto!important;
+  top:auto!important;bottom:auto!important;width:auto!important;
+  align-self:center!important;
+}
+.tug-teacher-arena>.tug-rope-wrap{
+  position:relative!important;left:auto!important;right:auto!important;
+  top:auto!important;bottom:auto!important;margin:0!important;
+  padding:0!important;display:block!important;
+}
+.tug-teacher-arena .tug-rope-wrap>.tug-rope-line{
+  position:absolute!important;left:0!important;right:0!important;
+  top:auto!important;bottom:44px!important;
+  width:100%!important;margin:0!important;
+}
+.tug-teacher-arena .tug-live-avatars{
+  position:absolute!important;top:auto!important;bottom:72px!important;
+  left:0!important;right:0!important;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;
+}
+.tug-teacher-arena .tug-live-avatars>span:first-child,
+.tug-teacher-arena .tug-live-avatars>span:last-child{
+  padding:4px!important;min-width:0!important;justify-content:flex-start!important;
+}
+#tugWorld .tug-player-rope>.tug-rope-line{
+  position:relative!important;width:100%!important;
+  left:auto!important;right:auto!important;margin:16px 0 30px!important;
+}
+#tugWorld .tug-player-rope p{left:auto!important;right:auto!important;transform:none!important}
+#tugWorld .tug-player-team{position:relative!important;top:auto!important;bottom:auto!important;left:auto!important;right:auto!important}
+@media(max-width:620px){
+ .tug-teacher-arena{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}
+ .tug-teacher-arena>.tug-rope-wrap{grid-row:2;grid-column:1/-1;min-height:210px}
+ .tug-teacher-arena>.tug-arena-score{grid-row:1}
+}
+/* Scoreboard holds full names and pull totals; avoid cramped captions in the arena. */
+.tug-live-avatars .tug-character-name,
+.tug-live-avatars .tug-character-meta{display:none!important}
+.tug-live-avatars .tug-character{justify-content:flex-end}
+.tug-score-card .tug-score-info strong{overflow-wrap:anywhere}
+@media(max-width:620px){
+ .tug-teacher-arena>.tug-arena-score{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:85px;padding:8px!important;text-align:center}
+ .tug-teacher-arena>.tug-arena-score span{font-size:.65rem}
+ .tug-teacher-arena>.tug-arena-score strong{font-size:1.55rem}
+ .tug-teacher-arena>.tug-arena-score small{font-size:.65rem}
+ .tug-score-team{padding:10px}
+ .tug-score-card{display:grid;grid-template-columns:68px minmax(0,1fr)!important;gap:8px;padding:8px 4px!important}
+ .tug-score-card .tug-score-avatar{grid-column:1;grid-row:1/3;width:64px!important;height:83px!important;min-width:0;min-height:0}
+ .tug-score-card .tug-score-avatar .tug-character{min-width:0!important;max-width:66px!important}
+ .tug-score-card .tug-score-avatar .tug-character-stage{min-height:76px!important}
+ .tug-score-card .tug-score-avatar .tug-avatar-art{max-height:76px!important}
+ .tug-score-card .tug-score-info{grid-column:2;grid-row:1;min-width:0}
+ .tug-score-card .tug-score-metrics{grid-column:2;grid-row:2;text-align:left;padding:0!important}
+}

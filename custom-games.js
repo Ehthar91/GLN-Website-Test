@@ -50,6 +50,12 @@ let tugLastScores={};
 function customLists(){try{return JSON.parse(localStorage.getItem(customListKey)||'{}')}catch{return{}}}
 function writeCustomLists(value){localStorage.setItem(customListKey,JSON.stringify(value))}
 function parseCustomItems(value){return String(value||'').split(/\r?\n|,/).map(v=>v.trim().replace(/\s+/g,' ')).filter(Boolean)}
+// In Tug of War, keep commas inside complete sentences. Single-line comma lists still work.
+function parseTugItems(value){
+  const text=String(value||'').trim();
+  const parts=/[\r\n]/.test(text)?text.split(/\r?\n/):text.split(',');
+  return parts.map(v=>v.trim().replace(/\s+/g,' ')).filter(Boolean);
+}
 function refreshCustomLists(){
   const menu=cq('#customSavedList');
   const current=menu.value;
@@ -79,7 +85,7 @@ function speedBonusWpm(){return customDifficulty()==='easy'?20:customDifficulty(
 function tugAvatarData(index){return tugAvatars[((Number(index)||0)%tugAvatars.length+tugAvatars.length)%tugAvatars.length]}
 function tugAvatarSrc(index,team='neutral'){
   const data=tugAvatarData(index);
-  return `tug-avatar-${data.key}.png`;
+  return `tug-avatar-${data.key}.webp`;
 }
 function tugAvatarPose(player,base='idle'){if(base!=='pull')return base;if(player?.finished)return'hold';return'pull'}
 function tugConsumeScoreBursts(players){
@@ -118,6 +124,7 @@ function renderTugAvatarFigure(playerOrIndex,options={}){
   img.loading='lazy';
   img.src=tugAvatarSrc(avatarIndex,team||'neutral');
   img.onerror=()=>{
+    if(!img.dataset.pngFallback){img.dataset.pngFallback='1';img.src=`tug-avatar-${data.key}.png`;return}
     img.hidden=true;
     stage.classList.add('asset-missing');
     if(!stage.querySelector('.tug-avatar-fallback')){
@@ -142,6 +149,52 @@ function renderTugAvatarFigure(playerOrIndex,options={}){
     root.appendChild(meta);
   }
   return root;
+}
+// Keep existing avatar elements across Firebase updates; avoid reloading each image.
+function updateTugAvatarNode(node,player,options={}){
+  const team=options.team||player.team||'';
+  const state=options.state||'idle';
+  node.classList.toggle('state-pull',state==='pull');
+  node.classList.toggle('state-hold',state==='hold');
+  node.classList.toggle('state-idle',state==='idle');
+  node.classList.toggle('state-ready',state==='ready');
+  node.classList.toggle('is-me',!!options.highlight);
+  const label=node.querySelector('.tug-character-name');
+  if(label&&label.textContent!==player.name)label.textContent=player.name||'';
+  const caption=node.querySelector('.tug-character-meta');
+  if(caption&&caption.textContent!==options.caption)caption.textContent=options.caption||'';
+  if(options.pulse){
+    node.classList.remove('pulse-pull','pulse-power');
+    // Flush just this scored avatar's animation, not the entire arena.
+    void node.offsetWidth;
+    node.classList.add(`pulse-${options.pulse}`);
+    node.querySelector('.tug-character-pop')?.remove();
+    const pop=document.createElement('b');pop.className='tug-character-pop';
+    pop.textContent=options.pulse==='power'?'+2 PULL':'PULL!';
+    node.querySelector('.tug-character-stage')?.appendChild(pop);
+    clearTimeout(node._tugPulseTimer);
+    node._tugPulseTimer=setTimeout(()=>{node.classList.remove('pulse-pull','pulse-power');pop.remove()},1000);
+  }
+}
+function updateTugAvatarList(container,players,team,options={}){
+  const members=players.filter(p=>p.team===team).sort((a,b)=>(Number(b.score)||0)-(Number(a.score)||0));
+  const existing=new Map(Array.from(container.children).filter(el=>el.dataset.playerId).map(el=>[el.dataset.playerId,el]));
+  members.forEach((player,index)=>{
+    const id=String(player.id||player.name);
+    const config={team,state:tugAvatarPose(player,'pull'),facing:team==='red'?'right':'left',showName:true,caption:`${Number(player.score)||0} pulls`,highlight:!!options.highlight&&player.id===tugPlayerId,pulse:options.pulses?.[player.id]};
+    let node=existing.get(id);
+    if(!node||node.dataset.avatarIndex!==String(player.avatar)){
+      if(node)node.remove();
+      node=renderTugAvatarFigure(player,{...config,pulse:null});
+      node.dataset.playerId=id;
+      node.dataset.avatarIndex=String(player.avatar);
+    }
+    updateTugAvatarNode(node,player,config);
+    const before=container.children[index]||null;
+    if(before!==node)container.insertBefore(node,before);
+    existing.delete(id);
+  });
+  existing.forEach(node=>{clearTimeout(node._tugPulseTimer);node.remove()});
 }
 function renderTugAvatarPicker(){
   const box=cq('#tugAvatarPicker');
@@ -354,7 +407,8 @@ function acceptCustomInput(value){
       }
     }else renderCustomKeyboard();
   }else{
-    cq('#customTyped').classList.add('wrong');setTimeout(()=>cq('#customTyped').classList.remove('wrong'),220);
+    const feedback=cq('#customTyped');feedback.classList.add('wrong');
+    clearTimeout(feedback._wrongTimer);feedback._wrongTimer=setTimeout(()=>feedback.classList.remove('wrong'),300);
     if(customMode==='tug'){tugAttemptedChars+=units;tugErrors++;tugPromptErrors++}
     else if(customDifficulty()==='hard'){customLives--;nextCustomChallenge()}
   }
@@ -404,7 +458,7 @@ function chooseBalancedTeam(players){
 
 cq('#tugCreateForm').onsubmit=async event=>{
   event.preventDefault();tugError('');
-  const source=parseCustomItems(cq('#tugWordsInput').value);
+  const source=parseTugItems(cq('#tugWordsInput').value);
   const count=Math.max(1,Math.min(50,Number(cq('#tugChallengeCount').value)||10));
   try{
     if(!source.length)throw new Error('Paste at least one word or sentence.');
@@ -569,7 +623,7 @@ function watchTugRoom(){
 }
 function beginTugPlayer(room){
   const me=room.players?.[tugPlayerId];if(!me)return;
-  tugClassStarted=true;customMode='tug';
+  tugClassStarted=true;customMode='tug';tugLastScores={};
   customItems=Array.isArray(room.items)?room.items:Object.values(room.items||{});
   customIndex=Math.max(0,Math.min(customItems.length,Number(me.index)||0));
   customScore=Number(me.score)||0;customValue='';customLanguage=room.language||typingLanguage;customDifficultyMode=normalizeTugDifficulty(room.difficulty);customKeyboardShifted=false;
@@ -580,10 +634,7 @@ function beginTugPlayer(room){
   updateTugPlayerArena(room,Object.values(room.players||{}));nextCustomChallenge();
 }
 function updateTugAvatarRow(selector,players,team,pulseMap={}){
-  const box=cq(selector);box.innerHTML='';
-  players.filter(p=>p.team===team).sort((a,b)=>(b.score||0)-(a.score||0)).forEach(player=>{
-    box.appendChild(renderTugAvatarFigure(player,{team,state:tugAvatarPose(player,'pull'),facing:team==='red'?'right':'left',showName:true,caption:`${Number(player.score)||0} pulls`,highlight:player.id===tugPlayerId,pulse:pulseMap[player.id]}));
-  });
+  updateTugAvatarList(cq(selector),players,team,{highlight:true,pulses:pulseMap});
 }
 function updateTugPlayerArena(room,players){
   const stats=tugTeamStats(players),position=tugRopePosition(players),pulseMap=tugConsumeScoreBursts(players);
@@ -593,29 +644,77 @@ function updateTugPlayerArena(room,players){
   const lead=myStats.avg-other.avg;
   cq('#tugPlayerStatus').textContent=lead>.05?`${teamLabel(tugTeam)} is pulling ahead!`:lead<-.05?'The other team is pulling ahead — keep typing!':'The rope is nearly centered. Keep pulling!';
 }
-function tugProgressText(player,total){if(player.finished)return'Finished';const current=Math.min(total,Math.max(0,Number(player.index)||0)+1);return `Prompt ${current} / ${total}`}
 function makeTugPlayerCard(player,total){
-  const card=document.createElement('article');card.className=`tug-score-card ${player.team||''}`;
-  const avatar=document.createElement('span');avatar.className='tug-score-avatar';avatar.appendChild(renderTugAvatarFigure(player,{team:player.team,compact:true,mini:true,state:player.finished?'hold':'ready',facing:player.team==='blue'?'left':'right'}));
-  const info=document.createElement('div');const name=document.createElement('strong');name.textContent=player.name;const progress=document.createElement('span');progress.textContent=tugProgressText(player,total);info.append(name,progress);
-  const metrics=document.createElement('div');metrics.className='tug-score-metrics';metrics.innerHTML=`<b>${Number(player.score)||0} pulls</b><span>${Number(player.wpm||0).toFixed(1)} WPM · ${Number(player.accuracy??100).toFixed(0)}%</span>`;
-  card.append(avatar,info,metrics);if(player.finished)card.classList.add('finished');return card;
+  const card=document.createElement('article');
+  card.dataset.playerId=String(player.id||player.name);
+  card.className=`tug-score-card ${player.team||''}`;
+  const avatar=document.createElement('span');avatar.className='tug-score-avatar';
+  avatar.appendChild(renderTugAvatarFigure(player,{team:player.team,compact:true,mini:true,state:player.finished?'hold':'ready',facing:player.team==='blue'?'left':'right'}));
+  const info=document.createElement('div');info.className='tug-score-info';
+  const name=document.createElement('strong');const progress=document.createElement('span');info.append(name,progress);
+  const metrics=document.createElement('div');metrics.className='tug-score-metrics';
+  const points=document.createElement('b');const speed=document.createElement('span');metrics.append(points,speed);
+  card.append(avatar,info,metrics);
+  updateTugPlayerCard(card,player,total);
+  return card;
+}
+function tugProgressText(player,total){
+  if(player.finished)return'Finished';
+  const current=Math.min(total,Math.max(0,Number(player.index)||0)+1);
+  return `Prompt ${current} / ${total}`;
+}
+function updateTugPlayerCard(card,player,total){
+  card.classList.toggle('finished',!!player.finished);
+  const [name,progress]=card.querySelector('.tug-score-info').children;
+  name.textContent=player.name||'';
+  progress.textContent=tugProgressText(player,total);
+  const [points,speed]=card.querySelector('.tug-score-metrics').children;
+  points.textContent=`${Number(player.score)||0} pulls`;
+  speed.textContent=`${Number(player.wpm||0).toFixed(1)} WPM · ${Number(player.accuracy??100).toFixed(0)}%`;
+  const avatar=card.querySelector('.tug-character');
+  if(avatar){
+    avatar.classList.toggle('state-hold',!!player.finished);
+    avatar.classList.toggle('state-ready',!player.finished);
+  }
 }
 function renderTugScoreboard(players,total){
-  const board=cq('#tugScoreboard');board.innerHTML='';
+  const board=cq('#tugScoreboard');
   ['red','blue'].forEach(team=>{
-    const column=document.createElement('section');column.className=`tug-score-team ${team}`;
-    const members=players.filter(p=>p.team===team).sort((a,b)=>(b.score||0)-(a.score||0)||(b.accuracy||0)-(a.accuracy||0));
-    const heading=document.createElement('h3');heading.textContent=`${teamDot(team)} ${teamLabel(team)} · ${members.length}`;column.appendChild(heading);
-    if(!members.length){const empty=document.createElement('div');empty.className='tug-score-empty';empty.textContent='No players';column.appendChild(empty)}
-    members.forEach(player=>column.appendChild(makeTugPlayerCard(player,total)));board.appendChild(column);
+    let column=Array.from(board.children).find(el=>el.dataset.team===team);
+    if(!column){
+      column=document.createElement('section');column.dataset.team=team;
+      column.className=`tug-score-team ${team}`;
+      column.appendChild(document.createElement('h3'));
+      board.appendChild(column);
+    }
+    const members=players.filter(p=>p.team===team).sort((a,b)=>(Number(b.score)||0)-(Number(a.score)||0)||(Number(b.accuracy)||0)-(Number(a.accuracy)||0));
+    column.firstElementChild.textContent=`${teamDot(team)} ${teamLabel(team)} · ${members.length}`;
+    let empty=column.querySelector('.tug-score-empty');
+    if(!members.length){
+      if(!empty){empty=document.createElement('div');empty.className='tug-score-empty';column.appendChild(empty)}
+      empty.textContent='No players';
+    }else empty?.remove();
+    const cards=new Map(Array.from(column.querySelectorAll(':scope > .tug-score-card')).map(el=>[el.dataset.playerId,el]));
+    members.forEach((player,index)=>{
+      const id=String(player.id||player.name);
+      let card=cards.get(id);
+      if(!card||card.dataset.avatarIndex!==String(player.avatar)){
+        if(card)card.remove();
+        card=makeTugPlayerCard(player,total);
+        card.dataset.avatarIndex=String(player.avatar);
+      }else updateTugPlayerCard(card,player,total);
+      const before=column.children[index+1]||null;
+      if(before!==card)column.insertBefore(card,before);
+      cards.delete(id);
+    });
+    cards.forEach(el=>el.remove());
   });
 }
 function renderTugTeacherArena(players){
   const stats=tugTeamStats(players),position=tugRopePosition(players),pulseMap=tugConsumeScoreBursts(players);
   cq('#tugTeacherRedScore').textContent=stats.red.avg.toFixed(1);cq('#tugTeacherBlueScore').textContent=stats.blue.avg.toFixed(1);cq('#tugTeacherRopeMarker').style.left=`${position}%`;
-  const fill=(selector,members,team)=>{const box=cq(selector);box.innerHTML='';members.slice().sort((a,b)=>(b.score||0)-(a.score||0)).forEach(player=>{box.appendChild(renderTugAvatarFigure(player,{team,state:tugAvatarPose(player,'pull'),facing:team==='red'?'right':'left',showName:true,caption:`${Number(player.score)||0} pulls`,pulse:pulseMap[player.id]}))})};
-  fill('#tugTeacherRedAvatars',stats.red.players,'red');fill('#tugTeacherBlueAvatars',stats.blue.players,'blue');
+  updateTugAvatarList(cq('#tugTeacherRedAvatars'),stats.red.players,'red',{pulses:pulseMap});
+  updateTugAvatarList(cq('#tugTeacherBlueAvatars'),stats.blue.players,'blue',{pulses:pulseMap});
 }
 function renderTugTeacherLive(room,players){
   cq('#tugClassSetup').hidden=true;cq('#tugLobby').hidden=true;customLive.hidden=true;customResults.hidden=true;cq('#tugTeacherLive').hidden=false;cq('#tugTeacherResults').hidden=true;cq('#endTugRoom').hidden=false;cq('#tugLiveCode').textContent=tugCode;
