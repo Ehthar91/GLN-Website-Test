@@ -58,3 +58,20 @@ body.theme-rgb .legacy-font-summary-icon{background:linear-gradient(135deg,#143e
 @media print{.legacy-font-studio{display:none!important}}
 
 /* Gallery fix: preview sprite embedded to avoid broken /assets image paths in GitHub Pages deployments. */
+
+/* Saw Cfcr local-only experimental live preview. */
+.cfcr-local-controls{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:16px 0;padding:15px;border:1px solid var(--border);border-radius:14px;background:var(--control)}
+.cfcr-file-control{display:grid;gap:6px;flex:1 1 290px}.cfcr-file-control small{font-size:.72rem;line-height:1.55;color:var(--muted)}
+.cfcr-local-label{display:inline-flex;align-items:center;gap:9px;justify-content:center;max-width:max-content;background:#0f779e;color:#fff;font-weight:800;border-radius:9px;padding:12px 15px;cursor:pointer;font-size:.81rem}
+.cfcr-local-label:hover{background:#096181}.cfcr-file-control input[type=file]{font-size:.73rem;max-width:100%;color:var(--muted)}
+.cfcr-file-control input[type=file]::file-selector-button{display:none}
+.cfcr-font-status{font-size:.77rem;color:var(--muted);flex:1 1 230px;line-height:1.5}
+.cfcr-live-panel{border:1px solid var(--border);border-radius:14px;background:var(--panel);padding:16px;margin:16px 0 20px}
+.cfcr-live-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px}
+.cfcr-live-head h3{margin:4px 0 0;font-size:1.1rem}.cfcr-safety-label{font-size:.69rem;color:#0a807c;border:1px solid #b2ded8;border-radius:50px;padding:5px 9px;font-weight:750}
+.cfcr-live-surface{min-height:112px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.9;font-size:clamp(1.55rem,2.6vw,2.2rem);padding:16px;border-radius:10px;background:#fff;color:#15324e;border:1px solid #d7e2ef;font-family:Padauk,'Noto Sans Myanmar',sans-serif}
+.cfcr-live-surface .cfcr-unmapped{border-bottom:2px dotted #de8f46;background:#fff0dc;color:#5b412a}
+.cfcr-live-status{font-size:.77rem;color:var(--muted);margin:10px 0 3px}.cfcr-live-note{font-size:.72rem;line-height:1.5;color:var(--muted);margin:0}
+body.theme-rgb .cfcr-live-panel{background:#112238}body.theme-rgb .cfcr-safety-label{color:#9bf2dd;border-color:#2c625a}
+@media(max-width:540px){.cfcr-local-controls{padding:11px}.cfcr-live-panel{padding:11px}.cfcr-live-surface{font-size:1.8rem;padding:12px}}
+@media print{.cfcr-local-controls,.cfcr-live-panel{display:none!important}}
