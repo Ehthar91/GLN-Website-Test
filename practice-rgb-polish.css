@@ -1,0 +1,173 @@
+/* GLN Practice Tutor | Gaming RGB refinement (2026-10-23)
+   Scoped to Practice and RGB theme only. Classic Light is untouched. */
+body.theme-rgb #practiceView {
+  --practice-rgb-panel: #0e1c32;
+  --practice-rgb-surface: #101f35;
+  --practice-rgb-line: #314c6b;
+  --practice-rgb-text: #eef7ff;
+  --practice-rgb-muted: #aec3db;
+  --practice-rgb-cyan: #65e9ff;
+  color: var(--practice-rgb-text);
+}
+/* Side watermarks are decorative, and should not compete with the tutor. */
+@supports selector(body:has(#practiceView:not([hidden]))) {
+  body.theme-rgb:has(#practiceView:not([hidden]))::before,
+  body.theme-rgb:has(#practiceView:not([hidden]))::after {
+    opacity: .012;
+    filter: saturate(.85);
+  }
+}
+body.theme-rgb #practiceView .practice-subheading {
+  color: #b4c5dd;
+}
+body.theme-rgb #practiceView .practice-head-badge {
+  color: #9feeff;
+  background: #123650;
+  border: 1px solid #376d89;
+}
+/* One family of dark glass surfaces, not mixed white/blue panels. */
+body.theme-rgb #practiceView .practice-controls,
+body.theme-rgb #practiceView .practice-lesson-card,
+body.theme-rgb #practiceView .practice-finger-card,
+body.theme-rgb #practiceView .practice-next-card,
+body.theme-rgb #practiceView .practice-keyboard-card {
+  background: linear-gradient(145deg, #10223a 0%, #0c192d 100%) !important;
+  color: #edf6ff;
+  border: 1px solid #2f4a69 !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .25), inset 0 1px 0 rgba(136, 213, 255, .035) !important;
+}
+body.theme-rgb #practiceView .practice-controls { background: linear-gradient(130deg,#142a43,#13253d) !important; }
+body.theme-rgb #practiceView .practice-controls .lesson-picker,
+body.theme-rgb #practiceView .practice-input-label,
+body.theme-rgb #practiceView .practice-reference-label,
+body.theme-rgb #practiceView .practice-keyboard-caption,
+body.theme-rgb #practiceView .practice-finger-heading small,
+body.theme-rgb #practiceView .practice-next-card > span {
+  color: #a9bdd7 !important;
+}
+body.theme-rgb #practiceView .practice-controls .lesson-picker select {
+  color: #eff8ff !important;
+  background: #0a182c !important;
+  border: 1px solid #3b597b !important;
+  color-scheme: dark;
+}
+body.theme-rgb #practiceView .practice-controls .lesson-picker select:focus-visible {
+  border-color: #65e9ff !important;
+  outline: 2px solid rgba(101, 233, 255, .25);
+  outline-offset: 2px;
+}
+/* Metrics: visible numbers with calm backgrounds. */
+body.theme-rgb #practiceView .practice-stats > div {
+  background: linear-gradient(148deg,#132740,#101d32) !important;
+  border: 1px solid #304a6d !important;
+  box-shadow: inset 0 1px 0 rgba(150, 220, 255, .04) !important;
+}
+body.theme-rgb #practiceView .practice-stats strong { color: #f3f8ff !important; }
+body.theme-rgb #practiceView .practice-stats span { color: #adbfda !important; }
+body.theme-rgb #practiceView .practice-stats #errorsStat { color: #ff8898 !important; }
+body.theme-rgb #practiceView .lesson-meta { color: #b4c6dc !important; }
+body.theme-rgb #practiceView .lesson-meta span:first-child { color: #50d6f8; }
+body.theme-rgb #practiceView .progress-track {
+  background: #192d49 !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, .35);
+}
+body.theme-rgb #practiceView .progress-track span {
+  background: linear-gradient(90deg, #10d8d4, #3a83ff, #ab61e9);
+}
+/* The white reference sheet was the largest inconsistency in RGB mode. */
+body.theme-rgb #practiceView .practice-target {
+  color: #bad0e9 !important;
+  background: linear-gradient(160deg,#09172c,#0c2037) !important;
+  border: 1px solid #304b6d !important;
+  text-shadow: none !important;
+  box-shadow: inset 0 2px 12px rgba(0, 0, 0, .25);
+}
+body.theme-rgb #practiceView .practice-target .pending {
+  color: #aabfdb !important;
+  text-shadow: none;
+}
+body.theme-rgb #practiceView .practice-target .done {
+  color: #51e2b5 !important;
+  text-shadow: none;
+}
+body.theme-rgb #practiceView .practice-target .current {
+  color: #08182b !important;
+  background: #90edff !important;
+  border-bottom: 3px solid #13bbec !important;
+  box-shadow: 0 0 0 2px rgba(104, 228, 255, .23), 0 0 16px rgba(22, 224, 255, .16) !important;
+}
+body.theme-rgb #practiceView .practice-type-input {
+  background: #09172a !important;
+  color: #f5fbff !important;
+  border: 2px solid #406080 !important;
+  caret-color: #8beaff;
+  box-shadow: inset 0 1px 9px rgba(0, 0, 0, .22);
+}
+body.theme-rgb #practiceView .practice-type-input:focus {
+  border-color: #6beeff !important;
+  box-shadow: 0 0 0 3px rgba(22, 224, 255, .16), 0 0 15px rgba(22, 224, 255, .06) !important;
+}
+body.theme-rgb #practiceView .practice-type-input.wrong {
+  background: #2a1828 !important;
+  border-color: #ff8195 !important;
+  box-shadow: 0 0 0 3px rgba(255, 103, 132, .13) !important;
+}
+body.theme-rgb #practiceView .practice-type-input::placeholder { color:#8ea5c2 !important; }
+body.theme-rgb #practiceView .practice-feedback-row .type-prompt { color: #aec2da; }
+body.theme-rgb #practiceView .practice-feedback-row .type-prompt.error { color:#ffa0a9 !important; }
+body.theme-rgb #practiceView .practice-feedback-row .type-prompt.complete,
+body.theme-rgb #practiceView .practice-completion { color: #61e6ba !important; }
+/* Teacher-friendly finger guidance with readable hierarchy. */
+body.theme-rgb #practiceView .practice-finger-heading strong,
+body.theme-rgb #practiceView .practice-guide-content strong,
+body.theme-rgb #practiceView .practice-keyboard-title { color: #f2f8ff !important; }
+body.theme-rgb #practiceView .practice-guide-icon {
+  color:#a1e7ff;
+  background: #193c57;
+  border: 1px solid #376684;
+}
+body.theme-rgb #practiceView .practice-finger-key {
+  color: #ddf7ff;
+  background: linear-gradient(#244768,#183451);
+  border: 1px solid #507da2;
+  border-bottom: 4px solid #0b2037;
+}
+body.theme-rgb #practiceView .practice-guide-content p,
+body.theme-rgb #practiceView .practice-next-card p,
+body.theme-rgb #practiceView .practice-guide-tip { color: #b7c8dd !important; }
+body.theme-rgb #practiceView .practice-next-key { color: #8deaff !important; text-shadow: 0 0 14px rgba(22,224,255,.17); }
+body.theme-rgb #practiceView .practice-guide-toggle {
+  background: #152e48;
+  border-color: #385977;
+  color: #d8efff;
+}
+body.theme-rgb #practiceView .practice-guide-toggle:hover { border-color: #76e4ff; }
+body.theme-rgb #practiceView .practice-guide-toggle:focus-visible { outline: 2px solid #76e4ff; outline-offset: 2px; }
+/* Clarify which key to press without bright white keys amid a dark board. */
+body.theme-rgb #practiceView .practice-keyboard-card .keyboard-top {
+  background: transparent;
+  border-color: transparent;
+}
+body.theme-rgb #practiceView .practice-keyboard-card .key.expected {
+  color:#06233a !important;
+  background:linear-gradient(#b6f7ff,#71d6f4) !important;
+  border-color:#52dfff !important;
+  box-shadow:0 0 0 2px rgba(53,222,255,.58),0 0 18px rgba(53,222,255,.3) !important;
+  text-shadow:none;
+}
+body.theme-rgb #practiceView .practice-keyboard-card .key.practice-finger-highlight:not(.expected) {
+  background: linear-gradient(#23443f,#163329) !important;
+  border-color: #4cbf9a !important;
+  box-shadow:0 0 0 2px rgba(76,191,154,.17) !important;
+  color:#d8fff0 !important;
+}
+body.theme-rgb #practiceView .practice-keyboard-card .key.wrong {
+  color: #fff !important;
+  background:linear-gradient(#713043,#451e33) !important;
+  border-color:#fa8094 !important;
+}
+@media (max-width: 780px) {
+  body.theme-rgb #practiceView .practice-controls,
+  body.theme-rgb #practiceView .practice-finger-card,
+  body.theme-rgb #practiceView .practice-next-card { box-shadow:none !important; }
+}
