@@ -196,3 +196,21 @@ body.theme-rgb .event-public-inline-panel>.event-public-form{background:#112840!
 body.theme-rgb .event-public-expanded-group>.event-public-slot{border-color:#3b92bc;border-bottom-color:#335979}
 @media(max-width:720px){.event-public-inline-panel>.event-public-form{padding:15px 12px}.event-public-expanded-group>.event-public-slot{padding:12px}}
 @media(prefers-reduced-motion:no-preference){.event-public-inline-panel{animation:eventPublicInlineAppear .18s ease-out}@keyframes eventPublicInlineAppear{from{opacity:.7;transform:translateY(-5px)}to{opacity:1;transform:none}}}
+
+/* Conference Sign-Up v1.4 — continued booking after a successful reservation. */
+.event-public-success .event-public-more-hint{grid-column:1/-1;margin:4px 0 0;padding:11px 13px;border-radius:10px;background:#e0f5ea;color:#195c46;font-size:.79rem;line-height:1.5;font-weight:650}
+.event-public-success .event-public-more-hint strong{color:inherit}
+.event-public-previous-links{grid-column:1/-1;display:grid;gap:9px;min-width:0;padding:12px;border:1px solid #c6e1d7;border-radius:11px;background:#fff}
+.event-public-previous-links[hidden]{display:none!important}
+.event-public-previous-links>strong{color:#215a4b;font-size:.75rem}
+.event-public-previous-link{display:flex;gap:8px;min-width:0;align-items:center}
+.event-public-previous-link input{min-width:0;flex:1}
+.event-public-previous-link button{flex-shrink:0;white-space:nowrap}
+body.theme-rgb .event-public-success .event-public-more-hint{background:#19453c;color:#bcf9db}
+body.theme-rgb .event-public-previous-links{background:#102537;border-color:#385a62}
+body.theme-rgb .event-public-previous-links>strong{color:#c1f4db}
+@media(max-width:560px){.event-public-previous-link{flex-wrap:wrap}.event-public-previous-link button{width:100%}}
+
+.event-public-previous-name{font-weight:750;font-size:.72rem;color:#215a4b;min-width:100px}
+body.theme-rgb .event-public-previous-name{color:#d7f8e7}
+@media(max-width:560px){.event-public-previous-name{width:100%}}
