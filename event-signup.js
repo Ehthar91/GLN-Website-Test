@@ -402,15 +402,77 @@ async function deleteEventSignup(id,event){
   catch(error){setEventStatus(error?.message||'Could not delete the conference.','error')}
 }
 function sharedEditorMessage(text,type=''){if(!eventSharedEditorMessage)return;eventSharedEditorMessage.textContent=text;eventSharedEditorMessage.classList.toggle('is-ok',type==='ok');eventSharedEditorMessage.classList.toggle('is-error',type==='error')}
+// Shared editors see confirmed bookings rather than the number of families visiting the page.
+// Count reservation records (including legacy signups), not open claims, for signup totals.
+function sharedEditorSignupTotals(event,slots=eventSlotsArray(event)){
+  let booked=0,capacity=0,available=0;
+  for(const slot of slots){
+    const filled=eventFilledCount(event,slot.id);
+    const max=Math.max(1,eventSpotIds(slot).length||Number(slot.capacity)||1);
+    booked+=eventSignupsForSlot(event,slot.id).length;
+    capacity+=max;
+    available+=Math.max(0,max-filled);
+  }
+  return{booked,capacity,available};
+}
+function updateSharedEditorSignupSummary(event){
+  const list=eventSharedEditorSlots;if(!list)return;
+  let summary=document.querySelector('#eventSharedEditorSignupSummary');
+  if(!summary){
+    summary=document.createElement('section');summary.id='eventSharedEditorSignupSummary';summary.className='event-shared-signup-summary';summary.setAttribute('aria-label','Conference signup totals');
+    const stats=[['booked','Signed up','Confirmed appointments'],['capacity','Total spots','Appointment capacity'],['available','Available','Remaining openings']];
+    for(const [key,label,description] of stats){
+      const card=document.createElement('div');card.className=`event-shared-signup-stat event-shared-signup-${key}`;
+      const title=document.createElement('span');title.textContent=label;
+      const value=document.createElement('strong');value.dataset.signupStat=key;value.textContent='0';
+      const foot=document.createElement('small');foot.textContent=description;
+      card.append(title,value,foot);summary.append(card);
+    }
+    list.parentNode.insertBefore(summary,list);
+  }
+  const totals=sharedEditorSignupTotals(event);
+  for(const [key,value] of Object.entries(totals)){
+    const label=summary.querySelector(`[data-signup-stat="${key}"]`);
+    if(label)label.textContent=value.toLocaleString();
+  }
+  summary.hidden=false;
+}
 function renderSharedEditor(){
-  const event=sharedEditorEventData;if(!event||!eventSharedEditorSlots)return;eventSharedEditorTitle.textContent=event.title||'Conference Sign-Up';eventSharedEditorDate.textContent=eventDateSummary(event);eventSharedEditorDescription.textContent=event.description||'Manage conference reservations for this conference.';eventSharedEditorSlots.innerHTML='';
-  for(const [date,daySlots] of eventSlotsByDate(event)){const day=document.createElement('section');day.className='event-shared-day';const dayHead=document.createElement('div');dayHead.className='event-shared-day-head';const title=document.createElement('strong');title.textContent=eventSlotFullDateText(date);const count=document.createElement('small');count.textContent=`${daySlots.length} time slot${daySlots.length===1?'':'s'}`;dayHead.append(title,count);day.append(dayHead);for(const slot of daySlots){const signups=eventSignupsForSlot(event,slot.id);const card=document.createElement('article');card.className='event-shared-slot';const head=document.createElement('div');head.className='event-shared-slot-head';const time=document.createElement('strong');time.textContent=eventSlotTimeRange(slot);const copy=document.createElement('div');const dateCopy=document.createElement('small');dateCopy.className='event-manager-slot-date';dateCopy.textContent=eventSlotFullDateText(eventSlotDate(slot,event));const label=document.createElement('b');label.textContent=slot.label||`${slot.duration||15} minute appointment`;const filled=document.createElement('small');filled.textContent=`${eventFilledCount(event,slot.id)}/${slot.capacity||1} filled`;copy.append(dateCopy,label,filled);head.append(time,copy);card.append(head,makeSignupManagerList(sharedEditorEventId,slot,signups,'editor'));day.append(card)}eventSharedEditorSlots.append(day)}
+  const event=sharedEditorEventData;if(!event||!eventSharedEditorSlots)return;
+  eventSharedEditorTitle.textContent=event.title||'Conference Sign-Up';
+  eventSharedEditorDate.textContent=eventDateSummary(event);
+  eventSharedEditorDescription.textContent=event.description||'Manage conference reservations for this conference.';
+  updateSharedEditorSignupSummary(event);
+  eventSharedEditorSlots.innerHTML='';
+  for(const [date,daySlots] of eventSlotsByDate(event)){
+    const day=document.createElement('section');day.className='event-shared-day';
+    const dayHead=document.createElement('div');dayHead.className='event-shared-day-head';
+    const title=document.createElement('strong');title.textContent=eventSlotFullDateText(date);
+    const count=document.createElement('small');
+    const totals=sharedEditorSignupTotals(event,daySlots);
+    count.textContent=`${totals.booked} signed up · ${daySlots.length} time slot${daySlots.length===1?'':'s'}`;
+    dayHead.append(title,count);day.append(dayHead);
+    for(const slot of daySlots){
+      const signups=eventSignupsForSlot(event,slot.id);
+      const card=document.createElement('article');card.className='event-shared-slot';
+      const head=document.createElement('div');head.className='event-shared-slot-head';
+      const time=document.createElement('strong');time.textContent=eventSlotTimeRange(slot);
+      const copy=document.createElement('div');
+      const dateCopy=document.createElement('small');dateCopy.className='event-manager-slot-date';dateCopy.textContent=eventSlotFullDateText(eventSlotDate(slot,event));
+      const label=document.createElement('b');label.textContent=slot.label||`${slot.duration||15} minute appointment`;
+      const filled=document.createElement('small');filled.textContent=`${eventFilledCount(event,slot.id)}/${slot.capacity||1} filled`;
+      copy.append(dateCopy,label,filled);head.append(time,copy);
+      card.append(head,makeSignupManagerList(sharedEditorEventId,slot,signups,'editor'));
+      day.append(card);
+    }
+    eventSharedEditorSlots.append(day);
+  }
   updateSharedScheduleButton();
 }
 async function openSharedEventEditor(id,token){
-  sharedEditorEventId=id;sharedEditorToken=token;sharedEditorEventData=null;publicEventSignupId='';if(publicEventUnsubscribe){publicEventUnsubscribe();publicEventUnsubscribe=null}if(sharedEditorUnsubscribe){sharedEditorUnsubscribe();sharedEditorUnsubscribe=null}document.body.classList.add('event-signup-public-mode');openCalculator('event-signup');eventSignupTeacherView.hidden=true;eventSignupPublicView.hidden=true;eventSignupSharedEditorView.hidden=false;sharedEditorMessage('Verifying editor link…');
-  try{await initRaceFirebase();if(!currentUser)throw new Error('Firebase sign-in is not ready.');const base=`eventSignups/${id}`;await fb.set(fb.ref(db,`${base}/editorSessions/${currentUser.uid}`),{token,createdAt:Date.now(),lastUsedAt:Date.now()});const snap=await fb.get(fb.ref(db,base));if(!snap.exists())throw new Error('This conference no longer exists.');sharedEditorEventData=snap.val();renderSharedEditor();sharedEditorMessage('Editor access verified. You can view conference reservations, move students to open times, and remove reservations. Only the conference owner can edit or delete the conference.','ok');sharedEditorUnsubscribe=fb.onValue(fb.ref(db,base),next=>{if(!next.exists()){sharedEditorMessage('This conference was deleted by the owner.','error');sharedEditorEventData=null;eventSharedEditorSlots.innerHTML='';return}sharedEditorEventData=next.val();renderSharedEditor();syncSharedEditorSchedule(id,sharedEditorEventData)},error=>sharedEditorMessage(error?.code==='PERMISSION_DENIED'?'This editor link was revoked or is no longer valid.':(error?.message||'Editor access was lost.'),'error'))}
-  catch(error){sharedEditorMessage(error?.code==='PERMISSION_DENIED'?'This editor link is invalid, expired, or has been revoked.':(error?.message||'Could not open the shared editor link.'),'error');eventSharedEditorSlots.innerHTML=''}
+  sharedEditorEventId=id;sharedEditorToken=token;sharedEditorEventData=null;document.querySelector('#eventSharedEditorSignupSummary')?.setAttribute('hidden','');publicEventSignupId='';if(publicEventUnsubscribe){publicEventUnsubscribe();publicEventUnsubscribe=null}if(sharedEditorUnsubscribe){sharedEditorUnsubscribe();sharedEditorUnsubscribe=null}document.body.classList.add('event-signup-public-mode');openCalculator('event-signup');eventSignupTeacherView.hidden=true;eventSignupPublicView.hidden=true;eventSignupSharedEditorView.hidden=false;sharedEditorMessage('Verifying editor link…');
+  try{await initRaceFirebase();if(!currentUser)throw new Error('Firebase sign-in is not ready.');const base=`eventSignups/${id}`;await fb.set(fb.ref(db,`${base}/editorSessions/${currentUser.uid}`),{token,createdAt:Date.now(),lastUsedAt:Date.now()});const snap=await fb.get(fb.ref(db,base));if(!snap.exists())throw new Error('This conference no longer exists.');sharedEditorEventData=snap.val();renderSharedEditor();sharedEditorMessage('Editor access verified. You can view conference reservations, move students to open times, and remove reservations. Only the conference owner can edit or delete the conference.','ok');sharedEditorUnsubscribe=fb.onValue(fb.ref(db,base),next=>{if(!next.exists()){sharedEditorMessage('This conference was deleted by the owner.','error');sharedEditorEventData=null;document.querySelector('#eventSharedEditorSignupSummary')?.setAttribute('hidden','');eventSharedEditorSlots.innerHTML='';return}sharedEditorEventData=next.val();renderSharedEditor();syncSharedEditorSchedule(id,sharedEditorEventData)},error=>sharedEditorMessage(error?.code==='PERMISSION_DENIED'?'This editor link was revoked or is no longer valid.':(error?.message||'Editor access was lost.'),'error'))}
+  catch(error){sharedEditorMessage(error?.code==='PERMISSION_DENIED'?'This editor link is invalid, expired, or has been revoked.':(error?.message||'Could not open the shared editor link.'),'error');eventSharedEditorSlots.innerHTML='';document.querySelector('#eventSharedEditorSignupSummary')?.setAttribute('hidden','')}
 }
 function publicMessage(text,type=''){eventPublicMessage.textContent=text;eventPublicMessage.classList.toggle('is-ok',type==='ok');eventPublicMessage.classList.toggle('is-error',type==='error')}
 function clearPublicBookingDraft(){
